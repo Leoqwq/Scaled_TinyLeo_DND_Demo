@@ -27,7 +27,7 @@ It supports the following commands:
 - fault_test: Simulate network faults by introducing link failures.
 
 Example Command:
-    python3 sn_remote.py nodes <machine_id> <workdir>
+    <configured-python> sn_remote.py nodes <machine_id> <workdir>
 """
 
 import os
@@ -37,6 +37,8 @@ import json
 import glob
 import ctypes
 import shutil
+import shlex
+import sysconfig
 from concurrent.futures import ProcessPoolExecutor,ThreadPoolExecutor
 import pickle
 from multiprocessing import shared_memory,resource_tracker
@@ -48,14 +50,52 @@ from link_failure_grpc import link_failure_pb2,link_failure_pb2_grpc
 
 ASSIGN_FILENAME = 'assign.json'
 PID_FILENAME = 'container_pid.txt'
-SDN_IP = '101.6.21.12'
+DEFAULT_FAILURE_CONTROLLER_ENDPOINT = '101.6.21.12:50051'
 
 NOT_ASSIGNED = 'NA'
 VXLAN_PORT = 4789
 # FIXME
 CLONE_NEWNET = 0x40000000
 libc = ctypes.CDLL(None)
-main_net_fd = os.open('/proc/self/ns/net', os.O_RDONLY)
+main_net_fd = None
+_pid_map_cache = None
+
+
+class _CheckedExecutor:
+    """Collect submitted work so worker exceptions reach the caller process."""
+
+    def __init__(self, executor):
+        self.executor = executor
+        self.futures = []
+
+    def submit(self, *args, **kwargs):
+        future = self.executor.submit(*args, **kwargs)
+        self.futures.append(future)
+        return future
+
+    def raise_for_failures(self):
+        for future in self.futures:
+            future.result()
+
+
+def _compile_pyctr(workdir):
+    """Compile pyctr with the running interpreter without a shell command."""
+    compile_flags = shlex.split(sysconfig.get_config_var("CFLAGS") or "")
+    include_dir = sysconfig.get_paths()["include"]
+    subprocess.check_call(
+        [
+            "gcc",
+            f"-I{include_dir}",
+            *compile_flags,
+            "-shared",
+            "-fPIC",
+            "-O2",
+            "pyctr.c",
+            "-o",
+            "pyctr.so",
+        ],
+        cwd=workdir,
+    )
 
 def _pid_map(pid_path, pop = False):
     """
@@ -92,7 +132,7 @@ def _pid_map(pid_path, pop = False):
         return ret
     return _pid_map_cache
 
-def _failure_report(sat1,sat2):
+def _failure_report(sat1, sat2, controller_endpoint):
     """
     Reports a link failure between two satellites to the SDN controller and retrieves the updated satellite states.
 
@@ -114,18 +154,35 @@ def _failure_report(sat1,sat2):
     Returns:
         list or None: A list of updated satellites if the request is successful, otherwise None.
     """
-    with grpc.insecure_channel(f'{SDN_IP}:50051') as channel:
+    with grpc.insecure_channel(controller_endpoint) as channel:
         stub = link_failure_pb2_grpc.LinkFailureServiceStub(channel)
         response = stub.HandleLinkFailure(link_failure_pb2.LinkFailureRequest(
             satellite_ids=[sat1,sat2],
         ))
         # print(f"Response: success={response.success}, message='{response.message}'")
         if response.success:
-            update_sats = response.message.split(",")
-            return update_sats
+            acknowledgement = json.loads(response.message)
+            required = {
+                'failed_link',
+                'removed_satellite',
+                'replacement_satellite',
+                'updated_satellites',
+            }
+            if not isinstance(acknowledgement, dict) or not required.issubset(
+                acknowledgement
+            ):
+                raise RuntimeError(
+                    "SDN controller returned malformed failure acknowledgement"
+                )
+            if acknowledgement['failed_link'] != [sat1, sat2]:
+                raise RuntimeError(
+                    "SDN controller acknowledged a different failed link"
+                )
+            return acknowledgement
         else:
-            print(f"Failed to update satellites: {response.message}")
-            return None
+            raise RuntimeError(
+                f"SDN controller rejected link failure: {response.message}"
+            )
 
 def _get_params(path):
     """
@@ -499,6 +556,11 @@ def sn_init_nodes(dir, sat_mid_dict_shell, gs_mid_dict):
 
 
 
+    controller_source = os.path.join(dir, 'controller')
+    if not os.path.isdir(controller_source):
+        raise FileNotFoundError(
+            f"controller mount source does not exist: {controller_source}"
+        )
     pid_file = open(dir + '/' + PID_FILENAME, 'w', encoding='utf-8')
     sat_cnt = 0
     for shell_id, mid_dict in enumerate(sat_mid_dict_shell):
@@ -509,7 +571,11 @@ def sn_init_nodes(dir, sat_mid_dict_shell, gs_mid_dict):
             node_dir = f"{dir}/shell{shell_id}/overlay/{node}"
             sat_cnt += 1
             os.makedirs(node_dir, exist_ok=True)
-            pid_file.write(node+':'+str(pyctr.container_run(node_dir, node))+' ')
+            pid_file.write(
+                node + ':' + str(
+                    pyctr.container_run(node_dir, node, controller_source)
+                ) + ' '
+            )
         pid_file.write('\n')
         print(f'[{machine_id}] shell {shell_id}: {sat_cnt} satellites initialized')
     
@@ -522,7 +588,11 @@ def sn_init_nodes(dir, sat_mid_dict_shell, gs_mid_dict):
         gs_lst.append(node)
         node_dir = f'{overlay_dir}/{node}'
         os.makedirs(node_dir, exist_ok=True)
-        pid_file.write(node+':'+str(pyctr.container_run(node_dir, node))+' ')
+        pid_file.write(
+            node + ':' + str(
+                pyctr.container_run(node_dir, node, controller_source)
+            ) + ' '
+        )
     pid_file.write('\n')
     print(f'[{machine_id}] GS:', ','.join(gs_lst))
 
@@ -550,7 +620,8 @@ def sn_init_network_muti(
 
     This function creates and configures network links for satellites and ground stations.
     """
-    with ProcessPoolExecutor(max_workers=256) as executor:
+    with ProcessPoolExecutor(max_workers=256) as pool:
+        executor = _CheckedExecutor(pool)
         for shell_id, mid_dict in enumerate(sat_mid_dict_shell):
             shell_dir = f"{dir}/shell{shell_id}"
             if not os.path.exists(shell_dir):
@@ -569,6 +640,7 @@ def sn_init_network_muti(
                     executor.submit(_add_link_inter_machine, idx, isl_sat, sat_name, ip_lst[mid_dict[sat_name]],f'10.{idx >> 8}.{idx & 0xFF}', delay, isl_bw, isl_loss)
             print(f"[{machine_id}] Shell {shell_id}:",
                 f"{add_cnt} added.")
+        executor.raise_for_failures()
     for shell_id, mid_dict in enumerate(sat_mid_dict_shell):
         for node, mid in mid_dict.items():
             resources_dir = f"{dir}/shell{shell_id}/overlay/{node}/resources"
@@ -599,7 +671,8 @@ def sn_update_network_muti(
     This function updates the network links for satellites and ground stations based on
     the current timestamp and configuration files.
     """
-    with ProcessPoolExecutor(max_workers=256) as executor:
+    with ProcessPoolExecutor(max_workers=256) as pool:
+        executor = _CheckedExecutor(pool)
         for shell_id, mid_dict in enumerate(sat_mid_dict_shell):
             shell_dir = f"{dir}/shell{shell_id}"
             if not os.path.exists(shell_dir):
@@ -636,9 +709,11 @@ def sn_update_network_muti(
             print(f"[{machine_id}] Shell {shell_id}:",
                 f"{del_cnt} deleted, {update_cnt} updated, {add_cnt} added.")
         if failure:
+            executor.raise_for_failures()
             return
         gs_dir = f"{dir}/GS-{len(gs_mid_dict)}"
         if not os.path.exists(gs_dir):
+            executor.raise_for_failures()
             return
         del_cnt, update_cnt, add_cnt = 0, 0, 0
         del_lst, update_lst, add_lst = _parse_gsls(f'{gs_dir}/gsl/{ts}.txt')
@@ -673,6 +748,8 @@ def sn_update_network_muti(
                 add_cnt += 1
                 executor.submit(_add_link_inter_machine, idx, gsl_sat, gs_name, ip_lst[gs_mid_dict[gs_name]],f'9.{idx >> 8}.{idx & 0xFF}', delay, gsl_bw, gsl_loss)
 
+        executor.raise_for_failures()
+
     print(f"[{machine_id}] GSL:",
           f"{del_cnt} deleted, {update_cnt} updated, {add_cnt} added.")
     return
@@ -698,9 +775,11 @@ def sn_container_check_output(pid, cmd, *args, **kwargs):
 
 def sn_operate_every_node(dir, func, *args):
     pid_map = _pid_map(dir + '/' + PID_FILENAME)
-    with ThreadPoolExecutor(max_workers=50) as executor:
+    with ThreadPoolExecutor(max_workers=50) as pool:
+        executor = _CheckedExecutor(pool)
         for name, pid in pid_map.items():
             executor.submit(func, pid, name, *args)
+        executor.raise_for_failures()
 
 def sn_ping(dir, src_gs, dst_gs):
     """
@@ -835,7 +914,8 @@ def sat_link_change(workdir,sat):
         f.write("1")
 
 def fault_test(workdir, ts, sat_mid_dict_shell, gs_mid_dict, ip_lst,
-                isl_bw, isl_loss, gsl_bw, gsl_loss):
+                isl_bw, isl_loss, gsl_bw, gsl_loss, sat1, sat2,
+                controller_endpoint=DEFAULT_FAILURE_CONTROLLER_ENDPOINT):
     """
     Simulates a fault test by introducing a link failure between two satellites and updating the network state.
 
@@ -864,9 +944,8 @@ def fault_test(workdir, ts, sat_mid_dict_shell, gs_mid_dict, ip_lst,
     Returns:
         None
     """
-    # local link change
-    sat1 = "SH1SAT1596"
-    sat2 = 'SH1SAT1483'
+    # The controller chooses the lexicographically first same-machine physical
+    # ISL, making failure selection deterministic for fixed artifacts.
     link_change_sats = [sat1,sat2]
 
     sat1_state = load_topo_from_shm(sat1)
@@ -892,7 +971,8 @@ def fault_test(workdir, ts, sat_mid_dict_shell, gs_mid_dict, ip_lst,
         sat_link_change(workdir,sat)
     
     # report to sdn
-    update_sats =_failure_report(sat1, sat2)
+    acknowledgement = _failure_report(sat1, sat2, controller_endpoint)
+    update_sats = acknowledgement['updated_satellites']
     # failure recovery
     if update_sats:
         update_link_state(
@@ -903,6 +983,9 @@ def fault_test(workdir, ts, sat_mid_dict_shell, gs_mid_dict, ip_lst,
         )
         for sat in update_sats:
             sat_link_change(workdir,sat)
+    else:
+        raise RuntimeError("failure recovery returned no updated satellites")
+    return acknowledgement
     
 def replace_shared_memory(name, data):
     """
@@ -1054,6 +1137,7 @@ def get_ts(workdir):
     
 
 if __name__ == '__main__':
+    main_net_fd = os.open('/proc/self/ns/net', os.O_RDONLY)
     _pid_map_cache = None
     if len(sys.argv) < 2:
         print('Usage: sn_remote.py <command> ...')
@@ -1088,12 +1172,7 @@ if __name__ == '__main__':
     try:
         import pyctr
     except ModuleNotFoundError:
-        subprocess.check_call(
-            "cd " + workdir + " && "
-            "gcc $(python3-config --cflags --ldflags)"
-            "-shared -fPIC -O2 pyctr.c -o pyctr.so",
-            shell=True
-        )
+        _compile_pyctr(workdir)
         import pyctr
     
     sat_mid_dict_shell, gs_mid_dict, ip_lst = _get_params(workdir + '/' + ASSIGN_FILENAME)
@@ -1132,9 +1211,16 @@ if __name__ == '__main__':
         sn_traceroute(workdir, sys.argv[4], sys.argv[5])
     elif cmd == 'fault_test':
         ts, isl_bw, isl_loss, gsl_bw, gsl_loss = sys.argv[4], sys.argv[5], sys.argv[6], sys.argv[7], sys.argv[8]
-        fault_test(
+        if len(sys.argv) != 12:
+            raise ValueError("fault_test requires exactly one satellite link")
+        acknowledgement = fault_test(
             workdir, ts, sat_mid_dict_shell, gs_mid_dict, ip_lst,
-            isl_bw, isl_loss, gsl_bw, gsl_loss
+            isl_bw, isl_loss, gsl_bw, gsl_loss, sys.argv[9], sys.argv[10],
+            sys.argv[11]
+        )
+        print(
+            'TINYLEO_FAILURE_ACK=' +
+            json.dumps(acknowledgement, sort_keys=True)
         )
     else:
         print('Unknown command')

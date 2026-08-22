@@ -10,6 +10,7 @@ import argparse
 import paramiko
 import sys
 import glob
+import shlex
 import numpy as np
 import json
 import copy
@@ -62,10 +63,10 @@ class LinkFailureService(link_failure_pb2_grpc.LinkFailureServiceServicer):
         sat1, sat2 = request.satellite_ids
         print(f"Handling link failure between {sat1} and {sat2}")
         try:
-            update_sats = self.remote_controller.handle_link_failure(sat1, sat2)
+            acknowledgement = self.remote_controller.handle_link_failure(sat1, sat2)
             return link_failure_pb2.LinkFailureResponse(
                 success=True,
-                message=",".join(update_sats)
+                message=json.dumps(acknowledgement, sort_keys=True)
             )
         except Exception as e:
             return link_failure_pb2.LinkFailureResponse(
@@ -124,6 +125,10 @@ def sn_load_file(path):
     execution_mode = table.get('execution_mode', 'remote')
     enable_failure_recovery = table.get('enable_failure_recovery', True)
     num_processes = table.get('num_processes', 8)
+    remote_python = table.get('remote_python', 'python3')
+    failure_controller_endpoint = table.get(
+        'failure_controller_endpoint', '101.6.21.12:50051'
+    )
 
     if start_epoch < 0:
         raise ValueError('start_epoch must be nonnegative')
@@ -131,7 +136,14 @@ def sn_load_file(path):
         raise ValueError('num_epochs must be nonnegative')
     if num_processes < 1:
         raise ValueError('num_processes must be positive')
-    if table.get('Name') == 'tinyleo_canada_parity' and num_processes > 6:
+    if not isinstance(remote_python, str) or not remote_python.strip():
+        raise ValueError('remote_python must be a nonempty string')
+    if (
+        not isinstance(failure_controller_endpoint, str)
+        or not failure_controller_endpoint.strip()
+    ):
+        raise ValueError('failure_controller_endpoint must be a nonempty string')
+    if str(table.get('Name', '')).startswith('tinyleo_canada_parity') and num_processes > 6:
         raise ValueError('Canada parity profile supports at most 6 processes')
     parser = argparse.ArgumentParser(description='manual to this script')
     parser.add_argument('--cons_name', type=str, default=table['Name'])
@@ -168,6 +180,10 @@ def sn_load_file(path):
     sn_args.__setattr__('execution_mode', execution_mode)
     sn_args.__setattr__('enable_failure_recovery', enable_failure_recovery)
     sn_args.__setattr__('num_processes', num_processes)
+    sn_args.__setattr__('remote_python', remote_python)
+    sn_args.__setattr__(
+        'failure_controller_endpoint', failure_controller_endpoint
+    )
     sn_args.__setattr__(
         'satellite_file',
         artifact_path('satellite_file', 'eval1_573_jinyao_24k_half.npy')
@@ -239,7 +255,17 @@ def sn_remote_cmd(remote_ssh, cmd):
 
     This function runs a command on the remote server and returns its output.
     """
-    return remote_ssh.exec_command(f"bash -i -c '{cmd}'")[1].read().decode().strip()
+    _stdin, stdout, stderr = remote_ssh.exec_command(
+        f"bash -i -c {shlex.quote(cmd)}"
+    )
+    output = stdout.read().decode().strip()
+    error = stderr.read().decode().strip()
+    channel = getattr(stdout, 'channel', None)
+    status = channel.recv_exit_status() if channel is not None else 0
+    if status != 0:
+        detail = error or output or 'no remote output'
+        raise RuntimeError(f"remote command exited with exit {status}: {detail}")
+    return output
 
 def sn_remote_wait_output(remote_ssh, cmd):
     """
@@ -251,8 +277,21 @@ def sn_remote_wait_output(remote_ssh, cmd):
 
     This function runs a command on the remote server and prints its output line by line.
     """
-    for line in remote_ssh.exec_command(f"bash -i -c '{cmd}'", get_pty=True)[1]:
+    _stdin, stdout, stderr = remote_ssh.exec_command(
+        f"bash -i -c {shlex.quote(cmd)}", get_pty=True
+    )
+    lines = []
+    for line in stdout:
         print(line, end='')
+        lines.append(line)
+    error = stderr.read().decode().strip()
+    channel = getattr(stdout, 'channel', None)
+    status = channel.recv_exit_status() if channel is not None else 0
+    output = ''.join(lines).strip()
+    if status != 0:
+        detail = error or output or 'no remote output'
+        raise RuntimeError(f"remote command exited with exit {status}: {detail}")
+    return output
 
 def sn_check_utility(time_index, remote_ssh, local_dir):
     """

@@ -61,10 +61,11 @@ def _valid_bundle(tmp_path: Path) -> tuple[Path, Path, Path]:
     )
     _write_csv(
         result_dir / "resource-usage.csv",
-        ["epoch", "system_memory_used_bytes", "swap_used_bytes"],
+        ["epoch", "process_rss_bytes", "system_memory_used_bytes", "swap_used_bytes"],
         [
             {
                 "epoch": epoch,
+                "process_rss_bytes": (2 * 1024**3) + epoch,
                 "system_memory_used_bytes": 20 * 1024**3,
                 "swap_used_bytes": 0,
             }
@@ -85,6 +86,9 @@ def _valid_bundle(tmp_path: Path) -> tuple[Path, Path, Path]:
     (result_dir / "ping-epoch-7.txt").write_text(
         "4 packets transmitted, 1 received, 75% packet loss\n", encoding="utf-8"
     )
+    (result_dir / "ping-epoch-6.txt").write_text(
+        "4 packets transmitted, 0 received, 100% packet loss\n", encoding="utf-8"
+    )
     (result_dir / "traceroute-epoch-5.txt").write_text(
         "traceroute to 10.0.0.9\n1 10.0.0.1 0.1 ms\n2 10.0.0.2 0.2 ms\n",
         encoding="utf-8",
@@ -93,13 +97,38 @@ def _valid_bundle(tmp_path: Path) -> tuple[Path, Path, Path]:
         "traceroute to 10.0.0.9\n1 10.0.0.1 0.1 ms\n2 10.0.0.3 0.2 ms\n",
         encoding="utf-8",
     )
+    (result_dir / "traceroute-epoch-6.txt").write_text(
+        "traceroute to 10.0.0.9\n1 10.0.0.1 0.1 ms\n2 10.0.0.4 0.2 ms\n",
+        encoding="utf-8",
+    )
     (result_dir / "failure-recovery-events.json").write_text(
         json.dumps(
             {
                 "failure_epoch": 6,
                 "recovery_observation_epoch": 7,
                 "events": [
-                    {"epoch": 6, "event": "failure_injection", "status": "returned"},
+                    {
+                        "epoch": 0,
+                        "event": "srv6_deployment",
+                        "status": "returned",
+                        "acknowledgement": {
+                            "remote_acknowledgements": [
+                                {"expected_count": 86, "started_count": 86}
+                            ]
+                        },
+                    },
+                    {
+                        "epoch": 6,
+                        "event": "failure_injection",
+                        "status": "returned",
+                        "acknowledgement": {
+                            "failed_link": ["SH1SAT10", "SH1SAT11"],
+                            "removed_satellite": "SH1SAT10",
+                            "replacement_satellite": "SH1SAT12",
+                            "updated_satellites": ["SH1SAT10", "SH1SAT12"],
+                            "remote_id": 0,
+                        },
+                    },
                     {
                         "epoch": 7,
                         "event": "recovery_observation",
@@ -146,6 +175,12 @@ def test_complete_bundle_passes_and_writes_stable_summary(tmp_path):
         "actual",
         "required",
         "evidence",
+    }
+    assert written["metrics"]["peak_process_rss_bytes"] == (2 * 1024**3) + 11
+    assert written["metrics"]["ping_loss_percent_by_artifact"] == {
+        "ping-epoch-0.txt": 0.0,
+        "ping-epoch-6.txt": 100.0,
+        "ping-epoch-7.txt": 75.0,
     }
 
 
@@ -229,9 +264,18 @@ def _no_ping(paths):
 
 def _no_recovery(paths):
     paths[0].joinpath("traceroute-epoch-7.txt").write_text(
-        paths[0].joinpath("traceroute-epoch-5.txt").read_text(encoding="utf-8"),
+        paths[0].joinpath("traceroute-epoch-6.txt").read_text(encoding="utf-8"),
         encoding="utf-8",
     )
+
+
+def _no_srv6_ack(paths):
+    event_path = paths[0] / "failure-recovery-events.json"
+    events = _load_json(event_path)
+    events["events"][0]["acknowledgement"]["remote_acknowledgements"][0][
+        "started_count"
+    ] = 85
+    _save_json(event_path, events)
 
 
 @pytest.mark.parametrize(
@@ -249,6 +293,7 @@ def _no_recovery(paths):
         (_few_changes, "topology_changes"),
         (_few_handovers, "gateway_handovers"),
         (_no_ping, "ping_reply"),
+        (_no_srv6_ack, "srv6_deployment"),
         (_no_recovery, "failure_recovery"),
     ],
 )
@@ -270,6 +315,19 @@ def test_runtime_numeric_evidence_fails_closed(tmp_path, bad_value):
     _write_csv(paths[0] / "resource-usage.csv", list(rows[0]), rows)
 
     assert _run(paths)["valid"] is False
+
+
+@pytest.mark.parametrize("bad_value", ["nan", "inf", "-1", "true"])
+def test_process_rss_is_required_and_validated(tmp_path, bad_value):
+    paths = _valid_bundle(tmp_path)
+    rows = list(csv.DictReader(paths[0].joinpath("resource-usage.csv").open()))
+    rows[0]["process_rss_bytes"] = bad_value
+    _write_csv(paths[0] / "resource-usage.csv", list(rows[0]), rows)
+
+    summary = _run(paths)
+
+    assert summary["valid"] is False
+    assert summary["metrics"]["peak_process_rss_bytes"] is None
 
 
 @pytest.mark.parametrize("case", ["missing", "malformed", "duplicate", "raised"])
@@ -364,11 +422,38 @@ def test_attempted_recovery_without_captured_statuses_fails(tmp_path):
     paths = _valid_bundle(tmp_path)
     event_path = paths[0] / "failure-recovery-events.json"
     events = _load_json(event_path)
-    events["events"][1]["measurement_statuses"]["traceroute"] = "missing"
+    events["events"][2]["measurement_statuses"]["traceroute"] = "missing"
     _save_json(event_path, events)
 
     summary = _run(paths)
 
+    assert summary["gates"]["failure_recovery"]["passed"] is False
+
+
+def test_natural_path_change_without_remote_failure_ack_cannot_pass(tmp_path):
+    paths = _valid_bundle(tmp_path)
+    event_path = paths[0] / "failure-recovery-events.json"
+    events = _load_json(event_path)
+    events["events"][1].pop("acknowledgement")
+    _save_json(event_path, events)
+
+    summary = _run(paths)
+
+    assert summary["gates"]["failure_recovery"]["passed"] is False
+
+
+def test_ping_received_count_without_packet_loss_cannot_pass(tmp_path):
+    paths = _valid_bundle(tmp_path)
+    paths[0].joinpath("ping-epoch-0.txt").write_text(
+        "4 packets transmitted, 4 received\n", encoding="utf-8"
+    )
+    paths[0].joinpath("ping-epoch-7.txt").write_text(
+        "4 packets transmitted, 4 received\n", encoding="utf-8"
+    )
+
+    summary = _run(paths)
+
+    assert summary["gates"]["ping_reply"]["passed"] is False
     assert summary["gates"]["failure_recovery"]["passed"] is False
 
 

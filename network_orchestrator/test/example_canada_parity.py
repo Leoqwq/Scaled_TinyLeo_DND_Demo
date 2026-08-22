@@ -384,6 +384,64 @@ def _phase(epoch: int) -> str:
     }[epoch]
 
 
+def _validate_srv6_acknowledgement(value: Any) -> dict:
+    if not isinstance(value, dict):
+        raise ValueError("SRv6 deployment acknowledgement must be an object")
+    acknowledgements = value.get("remote_acknowledgements")
+    if not isinstance(acknowledgements, list) or not acknowledgements:
+        raise ValueError("SRv6 deployment acknowledgement must list remote results")
+    for acknowledgement in acknowledgements:
+        if not isinstance(acknowledgement, dict):
+            raise ValueError("each SRv6 remote acknowledgement must be an object")
+        expected = acknowledgement.get("expected_count")
+        started = acknowledgement.get("started_count")
+        if (
+            isinstance(expected, bool)
+            or not isinstance(expected, int)
+            or expected <= 0
+            or isinstance(started, bool)
+            or not isinstance(started, int)
+            or started != expected
+        ):
+            raise ValueError("SRv6 deployment did not start every expected agent")
+    return value
+
+
+def _validate_failure_acknowledgement(value: Any) -> dict:
+    if not isinstance(value, dict):
+        raise ValueError("failure acknowledgement must be an object")
+    failed_link = value.get("failed_link")
+    removed = value.get("removed_satellite")
+    replacement = value.get("replacement_satellite")
+    updated = value.get("updated_satellites")
+    remote_id = value.get("remote_id")
+    if (
+        not isinstance(failed_link, list)
+        or len(failed_link) != 2
+        or any(not isinstance(node, str) or not node for node in failed_link)
+        or failed_link[0] == failed_link[1]
+    ):
+        raise ValueError("failure acknowledgement must identify one physical link")
+    if removed not in failed_link:
+        raise ValueError("failure acknowledgement removed satellite must be on failed link")
+    if (
+        not isinstance(replacement, str)
+        or not replacement
+        or replacement in failed_link
+        or replacement == removed
+    ):
+        raise ValueError("failure acknowledgement replacement identity is invalid")
+    if (
+        not isinstance(updated, list)
+        or removed not in updated
+        or replacement not in updated
+    ):
+        raise ValueError("failure acknowledgement must include removed and replacement nodes")
+    if isinstance(remote_id, bool) or not isinstance(remote_id, int) or remote_id < 0:
+        raise ValueError("failure acknowledgement remote_id must be nonnegative")
+    return value
+
+
 def _measurement_paths(controller: Any, result_dir: Path, kind: str, epoch: int):
     name = f"{kind}-epoch-{epoch}.txt"
     source = Path(controller.local_dir) / "result" / name
@@ -485,11 +543,14 @@ def _collect_measurements(
         "iperf": controller.set_iperf,
     }
     results = {}
+    handles = {}
     command_error = None
     for kind, method in methods.items():
         source, target = prepared[kind]
         try:
-            method(SOURCE_GS, DESTINATION_GS, f"epoch-{epoch}")
+            handles[kind] = method(
+                SOURCE_GS, DESTINATION_GS, f"epoch-{epoch}"
+            )
         except Exception as exc:
             _measurement_error(target, source, exc)
             results[kind] = _measurement_metadata(
@@ -499,6 +560,21 @@ def _collect_measurements(
             break
     if command_error is None and measurement_wait_s:
         sleep(measurement_wait_s)
+
+    for kind, handle in handles.items():
+        result = getattr(handle, "result", None)
+        if not callable(result):
+            continue
+        source, target = prepared[kind]
+        try:
+            result()
+        except Exception as exc:
+            _measurement_error(target, source, exc)
+            results[kind] = _measurement_metadata(
+                "error", source, target, target.stat().st_size
+            )
+            if command_error is None:
+                command_error = exc
 
     for kind, (source, target) in prepared.items():
         if kind in results:
@@ -522,10 +598,13 @@ def run_canada_parity(
     monotonic: Callable[[], float] = time.monotonic,
     resource_sampler: Callable[[int], dict] = _default_resource_sample,
     measurement_wait_s: float = 15.0,
+    routing_mode: str = "shortest",
 ) -> Path:
     """Run the fixed Canada scenario and return its result directory."""
     if measurement_wait_s < 0:
         raise ValueError("measurement_wait_s must be nonnegative")
+    if routing_mode not in {"shortest", "geographic"}:
+        raise ValueError("routing_mode must be shortest or geographic")
 
     configuration_file_path = Path(configuration_file_path).resolve()
     south_policy_path = Path(south_policy_path).resolve()
@@ -561,8 +640,26 @@ def run_canada_parity(
         minimum_ratio=minimum_path_ratio,
         configured_num_epochs=configured_num_epochs,
     )
+    applied_policy = south_policy if routing_mode == "shortest" else north_policy
 
     result_dir.mkdir(parents=True, exist_ok=True)
+    (result_dir / "scenario-metadata.json").write_text(
+        json.dumps(
+            {
+                "routing_mode": routing_mode,
+                "applied_policy": applied_policy,
+                "source": SOURCE_GS,
+                "destination": DESTINATION_GS,
+                "num_epochs": configured_num_epochs,
+                "failure_epoch": FAILURE_EPOCH,
+                "recovery_observation_epoch": RECOVERY_OBSERVATION_EPOCH,
+            },
+            indent=2,
+            sort_keys=True,
+        )
+        + "\n",
+        encoding="utf-8",
+    )
     for epoch in OBSERVATION_EPOCHS:
         for kind in ("ping", "traceroute", "iperf"):
             path = result_dir / f"{kind}-epoch-{epoch}.txt"
@@ -591,11 +688,11 @@ def run_canada_parity(
         )
         iperf_rows_by_epoch = {row["epoch"]: row for row in iperf_rows}
         controller.init_remote_machine()
+        controller.geopraphic_routing_policy = applied_policy
         controller.create_nodes()
         controller.create_links()
         if controller.enable_failure_recovery:
             controller.start_link_faliure_server()
-        controller.geopraphic_routing_policy = south_policy
 
         for epoch in range(controller.num_epochs):
             epoch_start = monotonic()
@@ -618,7 +715,23 @@ def run_canada_parity(
                 }
             )
             if epoch == 0:
-                controller.deploy_tinyleo_srv6_agent()
+                deployment_event = {
+                    "epoch": epoch,
+                    "event": "srv6_deployment",
+                    "status": "returned",
+                    "error": None,
+                }
+                try:
+                    deployment_ack = _validate_srv6_acknowledgement(
+                        controller.deploy_tinyleo_srv6_agent()
+                    )
+                    deployment_event["acknowledgement"] = deployment_ack
+                except Exception as exc:
+                    deployment_event["status"] = "raised"
+                    deployment_event["error"] = f"{type(exc).__name__}: {exc}"
+                    events.append(deployment_event)
+                    raise
+                events.append(deployment_event)
 
             if epoch == FAILURE_EPOCH:
                 failure_event = {
@@ -629,9 +742,12 @@ def run_canada_parity(
                 }
                 try:
                     if failure_injector is None:
-                        controller.tinyleo_fault_test()
+                        acknowledgement = controller.tinyleo_fault_test()
                     else:
-                        failure_injector(controller, epoch)
+                        acknowledgement = failure_injector(controller, epoch)
+                    failure_event["acknowledgement"] = (
+                        _validate_failure_acknowledgement(acknowledgement)
+                    )
                 except Exception as exc:
                     failure_event["status"] = "raised"
                     failure_event["error"] = f"{type(exc).__name__}: {exc}"
@@ -705,6 +821,11 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--result-dir", type=Path, default=DEFAULT_RESULT_DIR)
     parser.add_argument("--minimum-path-ratio", type=float, default=0.8)
     parser.add_argument("--measurement-wait-s", type=float, default=15.0)
+    parser.add_argument(
+        "--routing-mode",
+        choices=("shortest", "geographic"),
+        default="shortest",
+    )
     return parser
 
 
@@ -719,6 +840,7 @@ def main(argv: list[str] | None = None) -> int:
         result_dir=args.result_dir,
         minimum_path_ratio=args.minimum_path_ratio,
         measurement_wait_s=args.measurement_wait_s,
+        routing_mode=args.routing_mode,
     )
     return 0
 

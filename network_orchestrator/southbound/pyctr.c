@@ -37,6 +37,7 @@ static int container_init(
     const char* overlay_opt,
     const char* hostname,
     const char* base_dir,
+    const char* controller_src,
     int err_fd
     ) {
     close(STDIN_FILENO);
@@ -83,8 +84,6 @@ static int container_init(
         return child_err("mkdir controller failed: ", err_fd);
     }
 
-    char controller_src[PATH_MAX+add_len];
-    snprintf(controller_src, sizeof(controller_src), "/root/tinyleo-Arbitrary-LeastDelay/controller");
     if(mount(controller_src, controller_dst, NULL, MS_BIND|MS_REC, NULL) != 0) {
         return child_err("mount --bind controller failed: ", err_fd);
     }
@@ -177,7 +176,8 @@ int container_enter(pid_t ctr_pid, char *const* argv, int err_fd) {
 // on success, ret > 0 means child pid.
 // ret < 0 for parent err, ret == 0 for child err
 static int container_run_inner(
-    const char *base_dir, const char *hostname, char *chd_err, size_t max_len) {
+    const char *base_dir, const char *hostname, const char *controller_src,
+    char *chd_err, size_t max_len) {
     // 0755
     const mode_t MODE = S_IRWXU | (S_IRGRP|S_IXGRP) | (S_IROTH|S_IXOTH);
     const char* UPPER_DIR = "upper";
@@ -222,7 +222,10 @@ static int container_run_inner(
             exit(child_err("second fork failed: ", err_fds[1]));
         } else if(pid == 0) {
             close(event_fd);
-            exit(container_init(new_root, overlay_opt, hostname,base_dir, err_fds[1]));
+            exit(container_init(
+                new_root, overlay_opt, hostname, base_dir, controller_src,
+                err_fds[1]
+            ));
             // should not execute here
         }
         close(err_fds[1]);
@@ -291,14 +294,18 @@ static int container_exec_inner(
 static PyObject *container_run(PyObject *self, PyObject *args) {
     const char *base_dir = NULL;
     const char *hostname = NULL;
+    const char *controller_src = NULL;
     char chd_err[256];
     int pid;
 
     if (!PyArg_ParseTuple(args,
-        "ss:container_run(base_dir, hostname)", &base_dir, &hostname))
+        "sss:container_run(base_dir, hostname, controller_source)",
+        &base_dir, &hostname, &controller_src))
         return NULL;
 
-    pid = container_run_inner(base_dir, hostname, chd_err, sizeof(chd_err) - 1);
+    pid = container_run_inner(
+        base_dir, hostname, controller_src, chd_err, sizeof(chd_err) - 1
+    );
     if(pid < 0) {
         PyErr_SetFromErrno(PyExc_OSError);
         return NULL;

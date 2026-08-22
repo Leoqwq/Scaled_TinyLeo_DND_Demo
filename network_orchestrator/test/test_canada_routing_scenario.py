@@ -148,9 +148,21 @@ class FakeController:
 
     def deploy_tinyleo_srv6_agent(self):
         self._call("deploy")
+        return {
+            "remote_acknowledgements": [
+                {"remote_id": 0, "expected_count": 86, "started_count": 86}
+            ]
+        }
 
     def tinyleo_fault_test(self):
         self._call("failure")
+        return {
+            "failed_link": ["SH1SAT10", "SH1SAT11"],
+            "removed_satellite": "SH1SAT10",
+            "replacement_satellite": "SH1SAT12",
+            "updated_satellites": ["SH1SAT10", "SH1SAT12"],
+            "remote_id": 0,
+        }
 
     def _measure(self, kind, source, destination, filename):
         self._call(kind, source, destination, filename)
@@ -182,6 +194,39 @@ class IncrementingClock:
     def __call__(self):
         self.value += 0.125
         return self.value
+
+
+def test_async_measurement_worker_failure_propagates(tmp_path):
+    module = _load_scenario_module("example_canada_parity_async_failure_test")
+    (tmp_path / "controller" / "result").mkdir(parents=True)
+    (tmp_path / "results").mkdir()
+
+    class FailedHandle:
+        def result(self):
+            raise RuntimeError("remote ping exited nonzero")
+
+    class Controller:
+        local_dir = str(tmp_path / "controller")
+
+        def set_ping(self, *_args):
+            return FailedHandle()
+
+        def set_traceroute(self, *_args):
+            return None
+
+        def set_iperf(self, *_args):
+            return None
+
+    _measurements, error = module._collect_measurements(
+        Controller(),
+        0,
+        tmp_path / "results",
+        lambda _seconds: None,
+        0,
+    )
+
+    assert isinstance(error, RuntimeError)
+    assert str(error) == "remote ping exited nonzero"
 
 
 def _resource_sample(_epoch):
@@ -483,7 +528,13 @@ def test_main_nondefault_options_are_hidden_only_during_real_factory_constructio
         RemoteController, "update_tinyleo_topology", lambda self, epoch: None
     )
     monkeypatch.setattr(
-        RemoteController, "deploy_tinyleo_srv6_agent", lambda self: None
+        RemoteController,
+        "deploy_tinyleo_srv6_agent",
+        lambda self: {
+            "remote_acknowledgements": [
+                {"remote_id": 0, "expected_count": 1, "started_count": 1}
+            ]
+        },
     )
     monkeypatch.setattr(RemoteController, "set_ping", lambda *args: None)
     monkeypatch.setattr(RemoteController, "set_traceroute", lambda *args: None)
@@ -645,9 +696,24 @@ def test_runner_writes_observations_and_metadata_schemas(tmp_path):
     )
     assert events["failure_epoch"] == 6
     assert events["recovery_observation_epoch"] == 7
+    assert events["events"][0]["event"] == "srv6_deployment"
     assert events["events"][0]["status"] == "returned"
-    assert events["events"][1]["event"] == "recovery_observation"
-    assert events["events"][1]["status"] == "measurement_attempted"
+    assert events["events"][0]["acknowledgement"]["remote_acknowledgements"][0][
+        "started_count"
+    ] == 86
+    assert events["events"][1]["event"] == "failure_injection"
+    assert events["events"][1]["acknowledgement"]["failed_link"] == [
+        "SH1SAT10",
+        "SH1SAT11",
+    ]
+    assert events["events"][2]["event"] == "recovery_observation"
+    assert events["events"][2]["status"] == "measurement_attempted"
+
+    metadata = json.loads(
+        (result_dir / "scenario-metadata.json").read_text(encoding="utf-8")
+    )
+    assert metadata["routing_mode"] == "shortest"
+    assert metadata["applied_policy"] == {"[3, 2]->[3, 4]": [[3, 3]]}
 
     with (result_dir / "resource-usage.csv").open(
         newline="", encoding="utf-8"
@@ -722,6 +788,53 @@ def test_cleanup_and_failure_event_survive_failure_injection_exception(tmp_path)
     assert events["events"][-1]["event"] == "failure_injection"
     assert events["events"][-1]["status"] == "raised"
     assert "failure failed" in events["events"][-1]["error"]
+
+
+def test_noop_failure_without_remote_ack_is_rejected(tmp_path):
+    module = _load_scenario_module("example_canada_parity_noop_failure")
+    inputs = _write_scenario_inputs(tmp_path / "inputs", epochs=7)
+    controller = FakeController(tmp_path / "controller", num_epochs=7)
+    result_dir = tmp_path / "result"
+
+    with pytest.raises(ValueError, match="failure acknowledgement"):
+        _run(
+            module,
+            inputs,
+            controller,
+            result_dir,
+            failure_injector=lambda _controller, _epoch: None,
+        )
+
+    events = json.loads(
+        (result_dir / "failure-recovery-events.json").read_text(encoding="utf-8")
+    )
+    assert events["events"][-1]["event"] == "failure_injection"
+    assert events["events"][-1]["status"] == "raised"
+
+
+def test_routing_modes_apply_exact_fixed_policies_and_write_metadata(tmp_path):
+    module = _load_scenario_module("example_canada_parity_routing_modes")
+    inputs = _write_scenario_inputs(tmp_path / "inputs", epochs=1)
+
+    observed = {}
+    for mode, expected in (
+        ("shortest", module.SOUTH_POLICY),
+        ("geographic", module.NORTH_POLICY),
+    ):
+        controller = FakeController(tmp_path / f"controller-{mode}", num_epochs=1)
+        result_dir = tmp_path / f"result-{mode}"
+        _run(module, inputs, controller, result_dir, routing_mode=mode)
+        metadata = json.loads(
+            (result_dir / "scenario-metadata.json").read_text(encoding="utf-8")
+        )
+        assert metadata["routing_mode"] == mode
+        assert metadata["applied_policy"] == expected
+        assert controller.geopraphic_routing_policy == expected
+        observed[mode] = metadata
+
+    assert observed["shortest"]["num_epochs"] == observed["geographic"][
+        "num_epochs"
+    ] == 1
 
 
 def test_cleanup_survives_network_command_exception(tmp_path):

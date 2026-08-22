@@ -14,7 +14,9 @@ import time
 import json
 import threading
 import os
+import shlex
 import sys
+from concurrent.futures import Future, ThreadPoolExecutor
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 from southbound.sn_utils import *
 from failure_recovery_mpc import MPCFaultHandler
@@ -24,6 +26,22 @@ from sn_orchestrator_mpc import *
 ASSIGN_FILENAME = 'assign.json'
 PID_FILENAME = 'container_pid.txt'
 NOT_ASSIGNED = 'NA'
+
+
+def _start_result_thread(function, *args):
+    """Run a command in a daemon thread and expose its exception via Future."""
+    future = Future()
+
+    def run():
+        if not future.set_running_or_notify_cancel():
+            return
+        try:
+            future.set_result(function(*args))
+        except BaseException as exc:
+            future.set_exception(exc)
+
+    threading.Thread(target=run, daemon=True).start()
+    return future
 
 class RemoteController():
     """
@@ -79,6 +97,8 @@ class RemoteController():
         self.execution_mode = sn_args.execution_mode
         self.enable_failure_recovery = sn_args.enable_failure_recovery
         self.num_processes = sn_args.num_processes
+        self.remote_python = sn_args.remote_python
+        self.failure_controller_endpoint = sn_args.failure_controller_endpoint
         self.satellite_file = sn_args.satellite_file
         self.traffic_matrix_file = sn_args.traffic_matrix_file
         self.grid_satellites_file = sn_args.grid_satellites_file
@@ -160,17 +180,18 @@ class RemoteController():
         Returns:
             list: A list of satellites whose states were updated.
         """
+        failed_link = [sat1, sat2]
         print(f"Link failure between {sat1} and {sat2}")
         mpc = MPCFaultHandler(self.topo_dir,self.local_dir,self.ts)
         result = mpc.handle_link_failure(get_satellite_id(sat1), get_satellite_id(sat2))
         update_sats = set()
-        if result:
-            if 'replacement_info' in result:
-                remove_sat = get_satellite_name(result['replacement_info']['removed_satellite'])
-                replacement_sat = get_satellite_name(result['replacement_info']['replacement_satellite'])
-                print('remove sat',remove_sat,'replace sat',replacement_sat)
-                update_sats.add(remove_sat)
-                update_sats.add(replacement_sat)
+        if not result or 'replacement_info' not in result:
+            raise RuntimeError("failure recovery MPC returned no replacement identity")
+        remove_sat = get_satellite_name(result['replacement_info']['removed_satellite'])
+        replacement_sat = get_satellite_name(result['replacement_info']['replacement_satellite'])
+        print('remove sat',remove_sat,'replace sat',replacement_sat)
+        update_sats.add(remove_sat)
+        update_sats.add(replacement_sat)
         sat1 = replacement_sat
         # isls
         for sat2 in self.all_node_states[remove_sat]['isls']:
@@ -228,18 +249,16 @@ class RemoteController():
             f_update.write(' '.join(add_lst))
             f_update.write('\n')
         f_update.close()
-        conn_threads = []
         for remote in self.remote_lst:
-            thread = threading.Thread(
-                target=remote.upload_failure_recovery_file,
-                args=(self.ts, )
-                )
-            thread.start()
-            conn_threads.append(thread)
-        for thread in conn_threads:
-            thread.join()
+            remote.upload_failure_recovery_file(self.ts)
         print('update sats:', len(update_sats), update_sats)
-        return list(update_sats)
+        return {
+            'failed_link': failed_link,
+            'removed_satellite': remove_sat,
+            'replacement_satellite': replacement_sat,
+            'updated_satellites': sorted(update_sats),
+            'epoch': self.ts,
+        }
 
     def _init_tinyleo_topology(self):
         """
@@ -289,20 +308,19 @@ class RemoteController():
         """
         print(f"Update networks at t {self.ts}...")
         update_start = time.time()
-        conn_threads = []
-        for remote in self.remote_lst:
-            thread = threading.Thread(
-                target=remote.update_network,
-                args=(self.ts,
-                    self.sat_bandwidth,
-                    self.sat_loss,
-                    self.sat_ground_bandwidth,
-                    self.sat_ground_loss
-            ))
-            thread.start()
-            conn_threads.append(thread)
-        for thread in conn_threads:
-            thread.join()
+        with ThreadPoolExecutor(max_workers=max(1, len(self.remote_lst))) as pool:
+            list(
+                pool.map(
+                    lambda remote: remote.update_network(
+                        self.ts,
+                        self.sat_bandwidth,
+                        self.sat_loss,
+                        self.sat_ground_bandwidth,
+                        self.sat_ground_loss,
+                    ),
+                    self.remote_lst,
+                )
+            )
         end = time.time()
         print(end-update_start, "s for network update\n")
 
@@ -312,22 +330,37 @@ class RemoteController():
         """
         print(f"fault test ...")
         update_start = time.time()
-        conn_threads = []
-        for remote in self.remote_lst:
-            thread = threading.Thread(
-                target=remote.fault_test,
-                args=(self.ts,
-                    self.sat_bandwidth,
-                    self.sat_loss,
-                    self.sat_ground_bandwidth,
-                    self.sat_ground_loss
-            ))
-            thread.start()
-            conn_threads.append(thread)
-        for thread in conn_threads:
-            thread.join()
+        candidates = []
+        for sat1 in sorted(self.all_node_states):
+            remote = self.nodes.get(sat1)
+            if remote is None:
+                continue
+            for sat2 in sorted(self.all_node_states[sat1].get('isls', {})):
+                if sat1 >= sat2 or self.nodes.get(sat2) is not remote:
+                    continue
+                candidates.append((sat1, sat2, remote))
+        if not candidates:
+            raise RuntimeError(
+                "no deterministic same-machine ISL is available for failure injection"
+            )
+        sat1, sat2, remote = candidates[0]
+        acknowledgement = remote.fault_test(
+            self.ts,
+            self.sat_bandwidth,
+            self.sat_loss,
+            self.sat_ground_bandwidth,
+            self.sat_ground_loss,
+            (sat1, sat2),
+        )
+        if not isinstance(acknowledgement, dict):
+            raise RuntimeError("remote fault command returned no acknowledgement")
+        if acknowledgement.get('failed_link') != [sat1, sat2]:
+            raise RuntimeError(
+                "remote fault acknowledgement does not match requested ISL"
+            )
         end = time.time()
         print(end-update_start, "s for fault test\n")
+        return acknowledgement
 
     def deploy_tinyleo_srv6_agent(self):
         """
@@ -335,18 +368,25 @@ class RemoteController():
         """
         print(f"Deploy srv6 agent...")
         update_start = time.time()
-        conn_threads = []
-        for remote in self.remote_lst:
-            thread = threading.Thread(
-                target=remote.deploy_tinyleo_srv6_agent,
-                args=()
+        with ThreadPoolExecutor(max_workers=max(1, len(self.remote_lst))) as pool:
+            acknowledgements = list(
+                pool.map(
+                    lambda remote: remote.deploy_tinyleo_srv6_agent(),
+                    self.remote_lst,
                 )
-            thread.start()
-            conn_threads.append(thread)
-        for thread in conn_threads:
-            thread.join()
+            )
+        for acknowledgement in acknowledgements:
+            if not isinstance(acknowledgement, dict):
+                raise RuntimeError("SRv6 deployment returned no acknowledgement")
+            if (
+                acknowledgement.get('expected_count', 0) <= 0
+                or acknowledgement.get('started_count')
+                != acknowledgement.get('expected_count')
+            ):
+                raise RuntimeError("SRv6 deployment did not start every agent")
         end = time.time()
         print(end-update_start, "s for srv6 agent deploy\n")
+        return {'remote_acknowledgements': acknowledgements}
 
     def _init_local(self):
         """
@@ -437,6 +477,8 @@ class RemoteController():
                 local_dir=self.local_dir,
                 gs_dirname=self.gs_dirname if i in gs_mid_dict.values() else None,
                 key_filename=remote.get('key_filename'),
+                remote_python=self.remote_python,
+                failure_controller_endpoint=self.failure_controller_endpoint,
                 )
             )
         return remote_lst, sat_mid_dict, gs_mid_dict
@@ -486,20 +528,19 @@ class RemoteController():
         Initializes network links between nodes in the simulation.
         """
         print('Initializing links ...')
-        thread_lst = []
         begin = time.time()
-        for remote in self.remote_lst:
-            thread = threading.Thread(
-                target=remote.init_network,
-                args=(self.sat_bandwidth,
-                      self.sat_loss,
-                      self.sat_ground_bandwidth,
-                      self.sat_ground_loss),
+        with ThreadPoolExecutor(max_workers=max(1, len(self.remote_lst))) as pool:
+            list(
+                pool.map(
+                    lambda remote: remote.init_network(
+                        self.sat_bandwidth,
+                        self.sat_loss,
+                        self.sat_ground_bandwidth,
+                        self.sat_ground_loss,
+                    ),
+                    self.remote_lst,
+                )
             )
-            thread.start()
-            thread_lst.append(thread)
-        for thread in thread_lst:
-            thread.join()
         print("Link initialization:", time.time() - begin, 's consumed.\n')
 
     def set_ping(self, src, dst, filename):
@@ -513,7 +554,7 @@ class RemoteController():
         """
         node_map = self.node_map()
         machine = node_map[src]
-        machine.ping_async(
+        return machine.ping_async(
             os.path.join(self.local_dir,'result',f'ping-{filename}.txt'),
             src, dst
         )
@@ -529,7 +570,7 @@ class RemoteController():
         """
         node_map = self.node_map()
         machine = node_map[src]
-        machine.iperf_async(
+        return machine.iperf_async(
             os.path.join(self.local_dir,'result', f'iperf-{filename}.txt'),
             src, dst
         )
@@ -545,7 +586,7 @@ class RemoteController():
         """
         node_map = self.node_map()
         machine = node_map[src]
-        machine.traceroute_async(
+        return machine.traceroute_async(
             os.path.join(self.local_dir,'result', f'traceroute-{filename}.txt'),
             src, dst
         )
@@ -601,7 +642,8 @@ class RemoteMachine:
 
     def __init__(self, id, host, port, username, password=None,
                  shell_lst=None, experiment_name=None, local_dir=None,
-                 gs_dirname=None, key_filename=None):
+                 gs_dirname=None, key_filename=None, remote_python='python3',
+                 failure_controller_endpoint='101.6.21.12:50051'):
         """
         Initializes the RemoteMachine instance and sets up the remote environment.
 
@@ -620,6 +662,8 @@ class RemoteMachine:
         self.shell_lst = shell_lst
         self.local_dir = local_dir
         self.gs_dirname = gs_dirname
+        self.remote_python = remote_python
+        self.failure_controller_endpoint = failure_controller_endpoint
         self.ssh, self.sftp = sn_connect_remote(
             host = host,
             port = port,
@@ -627,8 +671,11 @@ class RemoteMachine:
             password = password,
             key_filename = key_filename,
         )
-        sn_remote_cmd(self.ssh, 'mkdir ~/' + experiment_name)
-        self.dir = sn_remote_cmd(self.ssh, 'echo ~/' + experiment_name)
+        experiment_component = shlex.quote(experiment_name)
+        sn_remote_cmd(self.ssh, f'mkdir -p "$HOME"/{experiment_component}')
+        self.dir = sn_remote_cmd(
+            self.ssh, f'printf "%s\\n" "$HOME"/{experiment_component}'
+        )
         self.sftp.put(
             os.path.join(os.path.dirname(__file__), 'sn_remote.py'),
             self.dir + '/sn_remote.py'
@@ -636,6 +683,9 @@ class RemoteMachine:
         self.sftp.put(
             os.path.join(os.path.dirname(__file__), 'pyctr.c'),
             self.dir + '/pyctr.c'
+        )
+        sn_remote_cmd(
+            self.ssh, 'rm -f ' + shlex.quote(self.dir + '/pyctr.so')
         )
         self.sftp.put(
             os.path.join(self.local_dir, ASSIGN_FILENAME),
@@ -647,13 +697,19 @@ class RemoteMachine:
             os.path.join(self.dir, 'link_failure_grpc')
         )
         controller_dir = os.path.join(self.dir,'controller')
-        sn_remote_cmd(self.ssh, 'mkdir ' + controller_dir)
+        sn_remote_cmd(self.ssh, 'mkdir -p ' + shlex.quote(controller_dir))
         all_node_states_dir = os.path.join(self.dir,'all_node_states')
-        sn_remote_cmd(self.ssh, 'mkdir ' + all_node_states_dir)
+        sn_remote_cmd(self.ssh, 'mkdir -p ' + shlex.quote(all_node_states_dir))
         upload_folder(
             self.sftp,
             os.path.abspath(os.path.join(os.path.dirname(__file__), '..','geographic_srv6_anycast')),
             os.path.join(controller_dir, 'geographic_srv6_anycast')
+        )
+
+    def _python_command(self, script, *args):
+        return ' '.join(
+            shlex.quote(str(value))
+            for value in (self.remote_python, script, *args)
         )
 
     
@@ -663,7 +719,9 @@ class RemoteMachine:
         """
         sn_remote_wait_output(
             self.ssh,
-            f"python3 {self.dir}/sn_remote.py nodes {self.id} {self.dir}"
+            self._python_command(
+                f"{self.dir}/sn_remote.py", "nodes", self.id, self.dir
+            )
         )
         self.sftp.get(
             os.path.join(self.dir, PID_FILENAME),
@@ -679,7 +737,9 @@ class RemoteMachine:
         """
         lines = sn_remote_cmd(
             self.ssh,
-            f"python3 {self.dir}/sn_remote.py list {self.id} {self.dir}"
+            self._python_command(
+                f"{self.dir}/sn_remote.py", "list", self.id, self.dir
+            )
         ).splitlines()[1:]
         nodes = [
             line.split()[0] for line in lines
@@ -698,14 +758,14 @@ class RemoteMachine:
         """
         for shell_name, sat_names in self.shell_lst:
             isl_dir = os.path.join(self.dir, shell_name,'isl')
-            sn_remote_cmd(self.ssh, 'mkdir ' + isl_dir)
+            sn_remote_cmd(self.ssh, 'mkdir -p ' + shlex.quote(isl_dir))
             self.sftp.put(
                 os.path.join(self.local_dir, shell_name, 'isl', 'init.txt'),
                 os.path.join(isl_dir, 'init.txt')
             )
         if self.gs_dirname is not None:
             gsl_dir = os.path.join(self.dir, self.gs_dirname, 'gsl')
-            sn_remote_cmd(self.ssh, 'mkdir ' + gsl_dir)
+            sn_remote_cmd(self.ssh, 'mkdir -p ' + shlex.quote(gsl_dir))
         self.update_network(-1, isl_bw, isl_loss, gsl_bw, gsl_loss)
 
     def upload_failure_recovery_file(self, t):
@@ -760,28 +820,63 @@ class RemoteMachine:
                 )
         sn_remote_wait_output(
             self.ssh,
-            f"python3 {self.dir}/sn_remote.py networks {self.id} {self.dir} "
-            f"{t} {isl_bw} {isl_loss} {gsl_bw} {gsl_loss}"
+            self._python_command(
+                f"{self.dir}/sn_remote.py", "networks", self.id, self.dir,
+                t, isl_bw, isl_loss, gsl_bw, gsl_loss,
+            )
         )
 
-    def fault_test(self, t, isl_bw, isl_loss, gsl_bw, gsl_loss):
+    def fault_test(self, t, isl_bw, isl_loss, gsl_bw, gsl_loss, failed_link):
         """
         Simulates a fault test on the remote machine by introducing link failures.
         """
-        sn_remote_wait_output(
+        output = sn_remote_wait_output(
             self.ssh,
-            f"python3 {self.dir}/sn_remote.py fault_test {self.id} {self.dir} "
-            f"{t} {isl_bw} {isl_loss} {gsl_bw} {gsl_loss}"
+            self._python_command(
+                f"{self.dir}/sn_remote.py", "fault_test", self.id, self.dir,
+                t, isl_bw, isl_loss, gsl_bw, gsl_loss, *failed_link,
+                self.failure_controller_endpoint,
+            )
         )
+        marker = 'TINYLEO_FAILURE_ACK='
+        acknowledgements = [
+            json.loads(line[len(marker):])
+            for line in output.splitlines()
+            if line.startswith(marker)
+        ]
+        if len(acknowledgements) != 1:
+            raise RuntimeError(
+                "remote fault command returned no unique acknowledgement"
+            )
+        acknowledgement = acknowledgements[0]
+        acknowledgement['remote_id'] = self.id
+        return acknowledgement
 
     def deploy_tinyleo_srv6_agent(self):
         """
         Deploy the SRv6 agent on the remote machine for data plane operations.
         """
-        sn_remote_wait_output(
+        output = sn_remote_wait_output(
             self.ssh,
-            f"python3 {self.dir}/controller/geographic_srv6_anycast/deploy_srv6_agent.py"
+            self._python_command(
+                f"{self.dir}/controller/geographic_srv6_anycast/deploy_srv6_agent.py",
+                "--workdir", self.dir,
+                "--python-executable", self.remote_python,
+            )
         )
+        marker = 'TINYLEO_SRV6_DEPLOY_ACK='
+        acknowledgements = [
+            json.loads(line[len(marker):])
+            for line in output.splitlines()
+            if line.startswith(marker)
+        ]
+        if len(acknowledgements) != 1:
+            raise RuntimeError(
+                "SRv6 deploy command returned no unique acknowledgement"
+            )
+        acknowledgement = acknowledgements[0]
+        acknowledgement['remote_id'] = self.id
+        return acknowledgement
 
     def ping_async(self, res_path, src, dst):
         """
@@ -798,17 +893,15 @@ class RemoteMachine:
         def _ping_inner(ssh, dir, res_path, src, dst):
             output = sn_remote_cmd(
                 ssh,
-                f"python3 {dir}/sn_remote.py ping {self.id} {dir} "
-                f"{src} {dst} 2>&1"
+                self._python_command(
+                    f"{dir}/sn_remote.py", "ping", self.id, dir, src, dst
+                ) + " 2>&1"
             )
             with open(res_path, 'w') as f:
                 f.write(output)
-        thread = threading.Thread(
-            target=_ping_inner,
-            args=(self.ssh, self.dir, res_path, src, dst)
+        return _start_result_thread(
+            _ping_inner, self.ssh, self.dir, res_path, src, dst
         )
-        thread.start()
-        return thread
     
     def iperf_async(self, res_path, src, dst):
         """
@@ -825,18 +918,17 @@ class RemoteMachine:
         def _iperf_inner(ssh, dir, res_path, src, dst):
             output = sn_remote_cmd(
                 ssh,
-                f"python3 {self.dir}/sn_remote.py iperf {self.id} {self.dir} "
-                f"{src} {dst} 2>&1"
+                self._python_command(
+                    f"{self.dir}/sn_remote.py", "iperf", self.id,
+                    self.dir, src, dst,
+                ) + " 2>&1"
             )
             with open(res_path, 'w') as f:
                 f.write(output)
 
-        thread = threading.Thread(
-            target=_iperf_inner,
-            args=(self.ssh, self.dir, res_path, src, dst)
+        return _start_result_thread(
+            _iperf_inner, self.ssh, self.dir, res_path, src, dst
         )
-        thread.start()
-        return thread
     
     def traceroute_async(self, res_path, src, dst):
         """
@@ -853,18 +945,17 @@ class RemoteMachine:
         def _traceroute_async(ssh, dir, res_path, src, dst):
             output = sn_remote_cmd(
                 ssh,
-                f"python3 {self.dir}/sn_remote.py traceroute {self.id} {self.dir} "
-                f"{src} {dst} 2>&1"
+                self._python_command(
+                    f"{self.dir}/sn_remote.py", "traceroute", self.id,
+                    self.dir, src, dst,
+                ) + " 2>&1"
             )
             with open(res_path, 'w') as f:
                 f.write(output)
 
-        thread = threading.Thread(
-            target=_traceroute_async,
-            args=(self.ssh, self.dir, res_path, src, dst)
+        return _start_result_thread(
+            _traceroute_async, self.ssh, self.dir, res_path, src, dst
         )
-        thread.start()
-        return thread
     
     def check_utility(self, res_path):
         """
@@ -883,5 +974,7 @@ class RemoteMachine:
         """
         sn_remote_cmd(
             self.ssh,
-            f"python3 {self.dir}/sn_remote.py clean {self.id} {self.dir}"
+            self._python_command(
+                f"{self.dir}/sn_remote.py", "clean", self.id, self.dir
+            )
         )

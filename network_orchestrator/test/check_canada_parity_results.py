@@ -29,6 +29,7 @@ GATE_REQUIREMENTS = {
     "topology_changes": "topology_change_count >= 3",
     "gateway_handovers": "gateway_handover_count >= 2",
     "ping_reply": "at least one Vancouver-to-Toronto ping artifact reports received > 0",
+    "srv6_deployment": "every expected namespace agent is acknowledged alive after startup",
     "failure_recovery": "epoch-6 failure returned; epoch-7 captured ping/traceroute prove a changed live path",
 }
 
@@ -167,12 +168,17 @@ def _load_synthesis(path: Path) -> dict:
     return payload
 
 
-_PING_RECEIVED = re.compile(r",\s*(\d+)\s+(?:packets\s+)?received\b", re.IGNORECASE)
+_PING_SUMMARY = re.compile(
+    r"(\d+)\s+packets transmitted,\s*"
+    r"(\d+)\s+(?:packets\s+)?received,.*?"
+    r"(\d+(?:\.\d+)?)%\s+packet loss",
+    re.IGNORECASE,
+)
 _HOP_LINE = re.compile(r"^\s*(\d+)\s+(.+?)\s*$")
 _IPV4 = re.compile(r"(?<![\d.])(?:\d{1,3}\.){3}\d{1,3}(?![\d.])")
 
 
-def _ping_received(path: Path) -> int | None:
+def _ping_stats(path: Path) -> dict[str, int | float] | None:
     try:
         text = path.read_text(encoding="utf-8")
     except (OSError, UnicodeError):
@@ -180,8 +186,23 @@ def _ping_received(path: Path) -> int | None:
     upper = text.upper()
     if "STATUS: ERROR" in upper or "STATUS: MISSING" in upper:
         return None
-    matches = _PING_RECEIVED.findall(text)
-    return max((int(value) for value in matches), default=None)
+    matches = _PING_SUMMARY.findall(text)
+    if len(matches) != 1:
+        return None
+    transmitted, received, loss = matches[0]
+    transmitted = int(transmitted)
+    received = int(received)
+    loss = float(loss)
+    if transmitted <= 0 or received < 0 or received > transmitted or not 0 <= loss <= 100:
+        return None
+    expected_loss = 100.0 * (transmitted - received) / transmitted
+    if not math.isclose(loss, expected_loss, rel_tol=0.0, abs_tol=0.11):
+        return None
+    return {
+        "transmitted": transmitted,
+        "received": received,
+        "loss_percent": loss,
+    }
 
 
 def _traceroute_path(path: Path) -> tuple[str, ...] | None:
@@ -223,6 +244,13 @@ def check_results(
     synthesis_path = Path(synthesis_result)
     gates = {name: _gate(requirement) for name, requirement in GATE_REQUIREMENTS.items()}
     errors: list[str] = []
+    metrics = {
+        "peak_process_rss_bytes": None,
+        "peak_process_rss_gib": None,
+        "ping_loss_percent_by_artifact": {},
+        "minimum_ping_loss_percent": None,
+        "recovery_ping_loss_percent": None,
+    }
 
     validation_epochs_exact = False
     validation_satellite_count: int | None = None
@@ -357,11 +385,20 @@ def check_results(
     try:
         resource_rows = _read_runtime_csv(
             result_dir / "resource-usage.csv",
-            {"epoch", "system_memory_used_bytes", "swap_used_bytes"},
+            {
+                "epoch",
+                "process_rss_bytes",
+                "system_memory_used_bytes",
+                "swap_used_bytes",
+            },
         )
         _, resource_epochs_exact = _epochs(resource_rows, "resource-usage.csv")
         memory_values = [
             float(_csv_number(row.get("system_memory_used_bytes"), "system_memory_used_bytes"))
+            for row in resource_rows
+        ]
+        process_rss_values = [
+            float(_csv_number(row.get("process_rss_bytes"), "process_rss_bytes"))
             for row in resource_rows
         ]
         swap_values = [
@@ -369,7 +406,10 @@ def check_results(
             for row in resource_rows
         ]
         peak_memory = max(memory_values)
+        peak_process_rss = max(process_rss_values)
         peak_swap = max(swap_values)
+        metrics["peak_process_rss_bytes"] = int(peak_process_rss)
+        metrics["peak_process_rss_gib"] = peak_process_rss / GIB
         _set(
             gates,
             "peak_memory",
@@ -425,14 +465,28 @@ def check_results(
 
     ping_evidence = []
     for path in sorted(result_dir.glob("ping-epoch-*.txt")):
-        received = _ping_received(path)
-        ping_evidence.append({"artifact": path.name, "received": received})
+        stats = _ping_stats(path)
+        ping_evidence.append({"artifact": path.name, "stats": stats})
+        if stats is not None:
+            metrics["ping_loss_percent_by_artifact"][path.name] = stats[
+                "loss_percent"
+            ]
+    if metrics["ping_loss_percent_by_artifact"]:
+        metrics["minimum_ping_loss_percent"] = min(
+            metrics["ping_loss_percent_by_artifact"].values()
+        )
+    recovery_stats = _ping_stats(result_dir / "ping-epoch-7.txt")
+    if recovery_stats is not None:
+        metrics["recovery_ping_loss_percent"] = recovery_stats["loss_percent"]
     _set(
         gates,
         "ping_reply",
-        any(item["received"] is not None and item["received"] > 0 for item in ping_evidence),
+        any(
+            item["stats"] is not None and item["stats"]["received"] > 0
+            for item in ping_evidence
+        ),
         ping_evidence,
-        "parsed received-reply counts; STATUS ERROR/MISSING is rejected",
+        "validated transmitted/received/loss tuples; STATUS ERROR/MISSING is rejected",
     )
 
     try:
@@ -446,6 +500,11 @@ def check_results(
         events = events_payload.get("events")
         if not isinstance(events, list) or not all(isinstance(event, dict) for event in events):
             raise ValueError("failure/recovery events must be a list of objects")
+        deployments = [
+            event
+            for event in events
+            if event.get("epoch") == 0 and event.get("event") == "srv6_deployment"
+        ]
         failures = [
             event
             for event in events
@@ -456,6 +515,41 @@ def check_results(
             for event in events
             if event.get("epoch") == 7 and event.get("event") == "recovery_observation"
         ]
+        if len(deployments) != 1 or deployments[0].get("status") != "returned":
+            raise ValueError("exactly one returned epoch-0 srv6_deployment is required")
+        deployment_ack = deployments[0].get("acknowledgement")
+        remote_deployments = (
+            deployment_ack.get("remote_acknowledgements")
+            if isinstance(deployment_ack, dict)
+            else None
+        )
+        deployment_ok = isinstance(remote_deployments, list) and bool(
+            remote_deployments
+        )
+        if deployment_ok:
+            for acknowledgement in remote_deployments:
+                if not isinstance(acknowledgement, dict):
+                    deployment_ok = False
+                    break
+                expected = acknowledgement.get("expected_count")
+                started = acknowledgement.get("started_count")
+                if (
+                    isinstance(expected, bool)
+                    or not isinstance(expected, int)
+                    or expected <= 0
+                    or isinstance(started, bool)
+                    or not isinstance(started, int)
+                    or started != expected
+                ):
+                    deployment_ok = False
+                    break
+        _set(
+            gates,
+            "srv6_deployment",
+            deployment_ok,
+            remote_deployments,
+            "epoch-0 remote agent startup acknowledgements",
+        )
         if len(failures) != 1 or failures[0].get("status") != "returned":
             raise ValueError("exactly one returned epoch-6 failure_injection is required")
         if len(recoveries) != 1:
@@ -464,16 +558,53 @@ def check_results(
         captured = isinstance(statuses, dict) and all(
             statuses.get(kind) == "captured" for kind in ("ping", "traceroute")
         )
-        epoch7_received = _ping_received(result_dir / "ping-epoch-7.txt")
+        failure_ack = failures[0].get("acknowledgement")
+        if not isinstance(failure_ack, dict):
+            raise ValueError("failure injection has no remote acknowledgement")
+        failed_link = failure_ack.get("failed_link")
+        removed = failure_ack.get("removed_satellite")
+        replacement = failure_ack.get("replacement_satellite")
+        updated = failure_ack.get("updated_satellites")
+        remote_id = failure_ack.get("remote_id")
+        acknowledgement_ok = (
+            isinstance(failed_link, list)
+            and len(failed_link) == 2
+            and all(isinstance(node, str) and node for node in failed_link)
+            and failed_link[0] != failed_link[1]
+            and removed in failed_link
+            and isinstance(replacement, str)
+            and bool(replacement)
+            and replacement not in failed_link
+            and isinstance(updated, list)
+            and removed in updated
+            and replacement in updated
+            and isinstance(remote_id, int)
+            and not isinstance(remote_id, bool)
+            and remote_id >= 0
+        )
+        epoch7_stats = _ping_stats(result_dir / "ping-epoch-7.txt")
         before_path = _traceroute_path(result_dir / "traceroute-epoch-5.txt")
+        post_failure_path = _traceroute_path(
+            result_dir / "traceroute-epoch-6.txt"
+        )
         recovery_path = _traceroute_path(result_dir / "traceroute-epoch-7.txt")
+        post_failure_stats = _ping_stats(result_dir / "ping-epoch-6.txt")
+        if post_failure_path is not None:
+            failure_to_recovery_changed = post_failure_path != recovery_path
+        else:
+            failure_to_recovery_changed = (
+                post_failure_stats is not None
+                and post_failure_stats["received"] == 0
+            )
         recovery_ok = (
             captured
-            and epoch7_received is not None
-            and epoch7_received > 0
+            and acknowledgement_ok
+            and epoch7_stats is not None
+            and epoch7_stats["received"] > 0
             and before_path is not None
             and recovery_path is not None
             and before_path != recovery_path
+            and failure_to_recovery_changed
         )
         _set(
             gates,
@@ -481,12 +612,16 @@ def check_results(
             recovery_ok,
             {
                 "failure_status": failures[0].get("status"),
+                "failure_acknowledgement": failure_ack,
                 "measurement_statuses": statuses,
-                "epoch7_received": epoch7_received,
+                "epoch7_ping": epoch7_stats,
                 "pre_failure_path": list(before_path) if before_path else None,
+                "post_failure_path": (
+                    list(post_failure_path) if post_failure_path else None
+                ),
                 "recovery_path": list(recovery_path) if recovery_path else None,
             },
-            "events plus independently parsed epoch-5/7 network artifacts",
+            "remote identity acknowledgement plus parsed epoch-5/6/7 network artifacts",
         )
     except (ValueError, TypeError) as exc:
         errors.append(str(exc))
@@ -499,6 +634,7 @@ def check_results(
     summary = {
         "valid": not errors and all(gate["passed"] for gate in gates.values()),
         "gates": gates,
+        "metrics": metrics,
         "errors": errors,
     }
     try:

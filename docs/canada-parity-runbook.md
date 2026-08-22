@@ -18,8 +18,18 @@ namespace/SRv6 emulation command does.
 
 ```bash
 export REPO="$PWD"
+test -z "$(git status --porcelain)" || {
+  echo "Refusing to run from a dirty worktree" >&2
+  exit 1
+}
 export RUN_ID="$(date -u +%Y%m%dT%H%M%SZ)"
-export RUN_ROOT="$REPO/run/canada-parity-$RUN_ID"
+export RUN_ROOT="${TINYLEO_RUN_ROOT:-/tmp/tinyleo-canada-parity-$RUN_ID}"
+case "$RUN_ROOT" in
+  "$REPO"|"$REPO"/*)
+    echo "RUN_ROOT must be outside the repository: $RUN_ROOT" >&2
+    exit 1
+    ;;
+esac
 export VENV="/tmp/tinyleo-venv-$RUN_ID"
 export KEY_FILE="/tmp/tinyleo-n2-key-$RUN_ID"
 mkdir -p "$RUN_ROOT"
@@ -53,9 +63,10 @@ export PYTHON_BIN="$VENV/bin/python"
 } | tee "$RUN_ROOT/environment.txt"
 ```
 
-The last metadata line must end in `machineTypes/n2-standard-8`. Stop if the
-worktree is dirty or the machine type differs. Configure passwordless localhost
-SSH for the disposable VM because the existing multi-machine path is retained:
+The clean-worktree check runs before any result directory is created. The last
+metadata line must end in `machineTypes/n2-standard-8`; stop if it differs.
+Configure passwordless localhost SSH for the disposable VM because the existing
+multi-machine path is retained:
 
 ```bash
 ssh-keygen -q -t ed25519 -N '' -f "$KEY_FILE"
@@ -239,13 +250,13 @@ for SCALE in 64 80 96; do
   test "$(cat "$SCALE_DIR/scale-status.txt")" = AVAILABLE || continue
   PREFLIGHT_DIR="$SCALE_DIR/preflight"
   mkdir -p "$PREFLIGHT_DIR"
-  "$PYTHON_BIN" - "$REPO" "$SCALE_DIR" "$KEY_FILE" <<'PY'
+  "$PYTHON_BIN" - "$REPO" "$SCALE_DIR" "$KEY_FILE" "$PYTHON_BIN" <<'PY'
 import json
 import sys
 from pathlib import Path
 import numpy as np
 
-repo, root, key = map(Path, sys.argv[1:])
+repo, root, key, remote_python = map(Path, sys.argv[1:])
 base = json.loads(
     (repo / "network_orchestrator/test/config/tinyleo_canada_parity.json")
     .read_text(encoding="utf-8")
@@ -263,6 +274,8 @@ base.update(
         "grid_satellites_file": str(artifacts / "canada_parity_grid_satellites.npy"),
         "block_positions_file": str(artifacts / "block_positions.json"),
         "topo_dir": str(root / "topology"),
+        "remote_python": str(remote_python),
+        "failure_controller_endpoint": "127.0.0.1:50051",
         "Machines": [{
             "IP": "127.0.0.1", "port": 22, "username": "root",
             "key_filename": str(key),
@@ -378,6 +391,11 @@ PY
 done
 ```
 
+`remote_python` is the absolute venv interpreter used to launch every uploaded
+`sn_remote.py` command and every namespace SRv6 agent. A nonzero SSH exit,
+worker exception, missing failure acknowledgement, or agent that exits during
+startup aborts the scenario; it is not converted into a successful event.
+
 The runner writes three `resource-usage.csv` and
 `topology-update-times.csv` rows per scale. Calculate p50/p95 with NumPy's
 linear percentile and transcribe only measured values:
@@ -404,25 +422,37 @@ Scale policy:
 5. Shortening the run reduces duration, not peak concurrent-node memory, and is
    not a valid remedy for a failed scale gate.
 
-## 4. Formal privileged 12-epoch run
+## 4. Two full privileged fixed-artifact A/B runs
 
-Set the selected passing scale explicitly, generate an absolute-path 12-epoch
-configuration, and run the fixed scenario. This is the only step that asserts
-the full deterministic epoch-6 failure and epoch-7 recovery observation.
+Set the selected passing scale explicitly. Both modes reuse the exact same
+constellation, MPC topology files, validation report, demand, epoch schedule,
+and deterministic failure schedule. Both runs create real namespaces and
+links, deploy verified SRv6 agents, inject the epoch-6 physical ISL failure,
+and collect packet-level evidence. An offline `find_path` call is not
+acceptance evidence.
 
 ```bash
 export SELECTED_SCALE=80  # replace only with the scale selected above
 export SCALE_DIR="$RUN_ROOT/scale-$SELECTED_SCALE"
-export FORMAL_DIR="$SCALE_DIR/formal"
-mkdir -p "$FORMAL_DIR"
+export AB_ROOT="$SCALE_DIR/formal-ab"
+mkdir -p "$AB_ROOT"
 
-"$PYTHON_BIN" - "$REPO" "$SCALE_DIR" "$FORMAL_DIR" \
-  "$KEY_FILE" <<'PY'
+find "$SCALE_DIR/artifacts" "$SCALE_DIR/topology" \
+  "$SCALE_DIR/validation-12" "$SCALE_DIR/synthesis_result.npy" \
+  -type f -print0 | sort -z | xargs -0 sha256sum \
+  > "$AB_ROOT/fixed-artifact-sha256.txt"
+
+for ROUTING_MODE in shortest geographic; do
+  MODE_DIR="$AB_ROOT/$ROUTING_MODE"
+  mkdir -p "$MODE_DIR"
+  "$PYTHON_BIN" - "$REPO" "$SCALE_DIR" "$MODE_DIR" \
+    "$KEY_FILE" "$PYTHON_BIN" "$ROUTING_MODE" <<'PY'
 import json
 import sys
 from pathlib import Path
 
-repo, root, formal, key = map(Path, sys.argv[1:])
+repo, root, mode_dir, key, remote_python = map(Path, sys.argv[1:6])
+routing_mode = sys.argv[6]
 base = json.loads(
     (repo / "network_orchestrator/test/config/tinyleo_canada_parity.json")
     .read_text(encoding="utf-8")
@@ -430,7 +460,7 @@ base = json.loads(
 artifacts = root / "artifacts"
 base.update(
     {
-        "Name": f"tinyleo_canada_parity_formal_{root.name}",
+        "Name": f"tinyleo_canada_parity_{routing_mode}_{root.name}",
         "Duration (s)": 12,
         "start_epoch": 0,
         "num_epochs": 12,
@@ -439,142 +469,261 @@ base.update(
         "grid_satellites_file": str(artifacts / "canada_parity_grid_satellites.npy"),
         "block_positions_file": str(artifacts / "block_positions.json"),
         "topo_dir": str(root / "topology"),
+        "remote_python": str(remote_python),
+        "failure_controller_endpoint": "127.0.0.1:50051",
         "Machines": [{
             "IP": "127.0.0.1", "port": 22, "username": "root",
             "key_filename": str(key),
         }],
     }
 )
-(formal / "config.json").write_text(
+(mode_dir / "config.json").write_text(
     json.dumps(base, indent=2, sort_keys=True) + "\n", encoding="utf-8"
 )
-south_policy = (
-    repo / "network_orchestrator/test/config/geographic_routing_policy_canada_south.json"
+policy_name = (
+    "geographic_routing_policy_canada_south.json"
+    if routing_mode == "shortest"
+    else "geographic_routing_policy_canada_north.json"
+)
+policy = (
+    repo / "network_orchestrator/test/config" / policy_name
 ).read_text(encoding="utf-8")
-(formal / "geopraphic_routing_policy.json").write_text(
-    south_policy, encoding="utf-8"
+(mode_dir / "geopraphic_routing_policy.json").write_text(
+    policy, encoding="utf-8"
 )
 PY
 
-(
-  cd "$REPO/network_orchestrator"
-  set -o pipefail
-  if ! sudo -E env PYTHONPATH="$REPO/network_orchestrator" \
-    "$PYTHON_BIN" test/example_canada_parity.py \
-    --config "$FORMAL_DIR/config.json" \
-    --south-policy test/config/geographic_routing_policy_canada_south.json \
-    --north-policy test/config/geographic_routing_policy_canada_north.json \
-    --backbone-demand "$REPO/network_synthesizer/test/data/canada_parity_backbone_demand.npy" \
+  (
+    cd "$REPO/network_orchestrator"
+    set -o pipefail
+    if sudo -E env PYTHONPATH="$REPO/network_orchestrator" \
+      "$PYTHON_BIN" test/example_canada_parity.py \
+      --config "$MODE_DIR/config.json" \
+      --south-policy test/config/geographic_routing_policy_canada_south.json \
+      --north-policy test/config/geographic_routing_policy_canada_north.json \
+      --routing-mode "$ROUTING_MODE" \
+      --backbone-demand "$REPO/network_synthesizer/test/data/canada_parity_backbone_demand.npy" \
+      --validation-report "$SCALE_DIR/validation-12/validation_report.json" \
+      --result-dir "$MODE_DIR/results" \
+      --measurement-wait-s 15 \
+      2>&1 | tee "$MODE_DIR/emulation.log"; then
+      printf 'PASS\n' > "$MODE_DIR/command-status.txt"
+    else
+      printf 'FAIL\n' > "$MODE_DIR/command-status.txt"
+    fi
+  )
+  sudo chown -R "$(id -u):$(id -g)" "$MODE_DIR"
+
+  sudo ip netns list | tee "$MODE_DIR/netns-after-cleanup.txt"
+  pgrep -af '[s]n_remote.py|[s]rv6_agent.py|[i]perf3' \
+    | tee "$MODE_DIR/processes-after-cleanup.txt" || true
+  free -b | tee "$MODE_DIR/free-after-cleanup.txt"
+  swapon --show --bytes | tee "$MODE_DIR/swap-after-cleanup.txt"
+  test "$(cat "$MODE_DIR/command-status.txt")" = PASS
+  test ! -s "$MODE_DIR/netns-after-cleanup.txt"
+  test ! -s "$MODE_DIR/processes-after-cleanup.txt"
+
+  "$PYTHON_BIN" \
+    "$REPO/network_orchestrator/test/check_canada_parity_results.py" \
+    "$MODE_DIR/results" \
     --validation-report "$SCALE_DIR/validation-12/validation_report.json" \
-    --result-dir "$FORMAL_DIR/results" \
-    --measurement-wait-s 15 \
-    2>&1 | tee "$FORMAL_DIR/emulation.log"; then
-    exit 1
-  fi
-)
-sudo chown -R "$(id -u):$(id -g)" "$FORMAL_DIR"
+    --synthesis-result "$SCALE_DIR/synthesis_result.npy"
+  test "$("$PYTHON_BIN" -c \
+    'import json,sys; print(json.load(open(sys.argv[1]))["valid"])' \
+    "$MODE_DIR/results/acceptance_summary.json")" = True
 
-sudo ip netns list | tee "$FORMAL_DIR/netns-after-cleanup.txt"
-pgrep -af 'sn_remote.py|srv6_agent.py|iperf3' \
-  | tee "$FORMAL_DIR/processes-after-cleanup.txt" || true
-free -b | tee "$FORMAL_DIR/free-after-cleanup.txt"
-swapon --show --bytes | tee "$FORMAL_DIR/swap-after-cleanup.txt"
+  (
+    cd /
+    sha256sum -c "$AB_ROOT/fixed-artifact-sha256.txt"
+  ) > "$MODE_DIR/fixed-artifact-verification.txt"
+done
 ```
 
-`netns-after-cleanup.txt` and `processes-after-cleanup.txt` must be empty. Treat
-residual namespaces or TinyLEO processes as a failed run; inspect them before
-manual removal rather than hiding a cleanup defect.
+The absolute venv interpreter recorded in each config launches remote commands
+and namespace agents. Container creation bind-mounts the current experiment's
+dynamic `controller` directory at `/resources/controller`; no legacy
+experiment path is assumed. Each deployment must acknowledge every live SRv6 agent.
+Failure injection deterministically selects the lexicographically first
+same-machine physical ISL; its acknowledgement is written only after remote
+mutation and recovery complete, and names the failed link, removed satellite,
+and replacement. A nonzero SSH exit, worker exception, missing acknowledgement,
+or dead agent aborts the scenario.
 
-Run the machine-readable checker with explicit inputs:
+The namespace and TinyLEO-process cleanup files must be empty after each mode.
+Inspect residual state before manual removal; never hide a cleanup defect and
+continue the comparison.
 
-```bash
-"$PYTHON_BIN" \
-  "$REPO/network_orchestrator/test/check_canada_parity_results.py" \
-  "$FORMAL_DIR/results" \
-  --validation-report "$SCALE_DIR/validation-12/validation_report.json" \
-  --synthesis-result "$SCALE_DIR/synthesis_result.npy"
-test "$("$PYTHON_BIN" -c \
-  'import json,sys; print(json.load(open(sys.argv[1]))["valid"])' \
-  "$FORMAL_DIR/results/acceptance_summary.json")" = True
-```
+## 5. Machine-readable A/B comparison
 
-The checker exits zero only when all 12 epochs, memory/swap/update gates,
-topology dynamics, path diversity, ping, and independently parsed recovery
-evidence pass. `STATUS: ERROR`, `STATUS: MISSING`, attempted-only recovery,
-malformed/duplicate evidence, and non-finite numbers fail closed.
-
-| Formal metric | Observed |
-|---|---|
-| Selected satellites | PENDING — run on n2-standard-8 |
-| Coverage ratio | PENDING — run on n2-standard-8 |
-| Peak host used GiB / swap GiB | PENDING — run on n2-standard-8 |
-| p50 / p95 topology update | PENDING — run on n2-standard-8 |
-| Path-diverse epochs | PENDING — run on n2-standard-8 |
-| Topology changes / gateway handovers | PENDING — run on n2-standard-8 |
-| Vancouver→Toronto ping | PENDING — run on n2-standard-8 |
-| Epoch-6 failure / epoch-7 changed recovery path | PENDING — run on n2-standard-8 |
-| Overall acceptance | PENDING — run on n2-standard-8 |
-
-## 5. Fixed-artifact routing A/B
-
-Keep the selected constellation and epoch-0 grid mapping immutable. Compare
-stock shortest path against a geographic policy that avoids southern cell 24,
-which is intended to steer onto the available northern Canada corridor. Inspect
-the recorded paths rather than assuming the steering succeeded. This is a control-plane A/B;
-the formal packet-level run above remains the end-to-end evidence.
+Build the comparison only after both complete acceptance summaries pass. This
+script fails if the scenarios did not use the same failure schedule and link,
+or if packet-level latency, loss, or hop evidence is unparseable. Update
+interruption is the maximum real topology-update duration at failure epoch 6
+and recovery-observation epoch 7.
 
 ```bash
-PYTHONPATH="$REPO/network_orchestrator" \
-  "$PYTHON_BIN" - "$SCALE_DIR/artifacts/canada_parity_grid_satellites.npy" \
-  "$FORMAL_DIR/routing-ab.json" <<'PY'
+"$PYTHON_BIN" - "$AB_ROOT" <<'PY'
+import csv
+import hashlib
 import json
+import re
+import statistics
 import sys
-import tempfile
 from pathlib import Path
 
-import numpy as np
-from northbound import TinyLEONorthboundAPI
+root = Path(sys.argv[1])
+ping_summary = re.compile(
+    r"(\d+) packets transmitted,\s*(\d+) (?:packets )?received,.*?"
+    r"(\d+(?:\.\d+)?)% packet loss",
+    re.IGNORECASE,
+)
+rtt_summary = re.compile(
+    r"(?:rtt|round-trip).*?=\s*"
+    r"\d+(?:\.\d+)?/(\d+(?:\.\d+)?)/\d+(?:\.\d+)?",
+    re.IGNORECASE,
+)
+hop_line = re.compile(r"^\s*(\d+)\s+\S+", re.MULTILINE)
 
-grid_path, output_path = map(Path, sys.argv[1:])
-mapping = np.load(grid_path, allow_pickle=True).item()
-base = {
-    "grid_config": {"rows": 11, "cols": 11},
-    "global_settings": {"isl_capacity_gbps": 200.0},
-    "traffic_demands": [],
-}
-with tempfile.TemporaryDirectory() as tmp:
-    config_path = Path(tmp) / "config.json"
-    config_path.write_text(json.dumps(base), encoding="utf-8")
-    api = TinyLEONorthboundAPI(str(config_path))
-    rows = []
-    for epoch in range(12):
-        api.grid_density = {
-            grid: len(mapping[epoch][grid]) for grid in range(121)
+
+def read_ping(path):
+    text = path.read_text(encoding="utf-8")
+    packet = ping_summary.search(text)
+    rtt = rtt_summary.search(text)
+    if not packet or not rtt:
+        raise SystemExit(f"unparseable packet-level ping: {path}")
+    sent, received, loss = packet.groups()
+    if int(sent) <= 0 or int(received) <= 0:
+        raise SystemExit(f"ping has no live replies: {path}")
+    return {
+        "received": int(received),
+        "loss_percent": float(loss),
+        "average_latency_ms": float(rtt.group(1)),
+    }
+
+
+def read_hops(path):
+    count = len(hop_line.findall(path.read_text(encoding="utf-8")))
+    if count <= 0:
+        raise SystemExit(f"unparseable traceroute hops: {path}")
+    return count
+
+
+def read_mode(mode):
+    result = root / mode / "results"
+    acceptance = json.loads(
+        (result / "acceptance_summary.json").read_text(encoding="utf-8")
+    )
+    if acceptance.get("valid") is not True:
+        raise SystemExit(f"{mode} acceptance did not pass")
+    metadata = json.loads(
+        (result / "scenario-metadata.json").read_text(encoding="utf-8")
+    )
+    if metadata.get("routing_mode") != mode:
+        raise SystemExit(f"{mode} result declares a different routing mode")
+    events = json.loads(
+        (result / "failure-recovery-events.json").read_text(encoding="utf-8")
+    )["events"]
+    failure = next(
+        event for event in events
+        if event.get("event") == "failure_injection" and event.get("epoch") == 6
+    )
+    pings = {
+        path.stem.rsplit("-", 1)[-1]: read_ping(path)
+        for path in sorted(result.glob("ping-epoch-*.txt"))
+    }
+    hops = {
+        path.stem.rsplit("-", 1)[-1]: read_hops(path)
+        for path in sorted(result.glob("traceroute-epoch-*.txt"))
+    }
+    if set(pings) != set(hops) or not pings:
+        raise SystemExit(f"{mode} ping/traceroute epochs differ")
+    with (result / "topology-update-times.csv").open(newline="") as stream:
+        updates = {
+            int(row["epoch"]): float(row["duration_seconds"])
+            for row in csv.DictReader(stream)
+            if row["status"] == "returned"
         }
-        shortest = api.find_path(
-            23, 25, {"routing_policy": "shortest_path"}
-        )
-        geographic = api.find_path(
-            23, 25, {"routing_policy": "geo_avoid", "avoid_cells": [24]}
-        )
-        rows.append(
-            {"epoch": epoch, "shortest_path": shortest,
-             "geographic_avoid_24": geographic,
-             "path_changed": shortest != geographic}
-        )
-output_path.write_text(json.dumps(rows, indent=2) + "\n", encoding="utf-8")
+    if 6 not in updates or 7 not in updates:
+        raise SystemExit(f"{mode} lacks failure-window update timing")
+    per_epoch = {
+        epoch: {**pings[epoch], "traceroute_hops": hops[epoch]}
+        for epoch in sorted(pings, key=int)
+    }
+    return {
+        "routing_mode": metadata["routing_mode"],
+        "failure_schedule": {
+            "failure_epoch": metadata["failure_epoch"],
+            "recovery_observation_epoch": metadata["recovery_observation_epoch"],
+        },
+        "failed_link": failure["acknowledgement"]["failed_link"],
+        "per_epoch": per_epoch,
+        "mean_traceroute_hops": statistics.fmean(hops.values()),
+        "mean_latency_ms": statistics.fmean(
+            item["average_latency_ms"] for item in pings.values()
+        ),
+        "mean_loss_percent": statistics.fmean(
+            item["loss_percent"] for item in pings.values()
+        ),
+        "failure_window_update_interruption_seconds": max(updates[6], updates[7]),
+        "validated_peak_process_rss_bytes": acceptance["metrics"][
+            "peak_process_rss_bytes"
+        ],
+        "validated_recovery_ping_loss_percent": acceptance["metrics"][
+            "recovery_ping_loss_percent"
+        ],
+    }
+
+
+shortest = read_mode("shortest")
+geographic = read_mode("geographic")
+if shortest["failure_schedule"] != geographic["failure_schedule"]:
+    raise SystemExit("A/B failure schedules differ")
+if shortest["failed_link"] != geographic["failed_link"]:
+    raise SystemExit("deterministic failed links differ")
+manifest = root / "fixed-artifact-sha256.txt"
+comparison = {
+    "fixed_artifact_manifest_sha256": hashlib.sha256(
+        manifest.read_bytes()
+    ).hexdigest(),
+    "shortest": shortest,
+    "geographic": geographic,
+    "geographic_minus_shortest": {
+        "mean_traceroute_hops": (
+            geographic["mean_traceroute_hops"] - shortest["mean_traceroute_hops"]
+        ),
+        "mean_latency_ms": geographic["mean_latency_ms"] - shortest["mean_latency_ms"],
+        "mean_loss_percent": (
+            geographic["mean_loss_percent"] - shortest["mean_loss_percent"]
+        ),
+        "failure_window_update_interruption_seconds": (
+            geographic["failure_window_update_interruption_seconds"]
+            - shortest["failure_window_update_interruption_seconds"]
+        ),
+    },
+}
+(root / "routing_ab_comparison.json").write_text(
+    json.dumps(comparison, indent=2, sort_keys=True) + "\n", encoding="utf-8"
+)
 PY
 ```
 
-Report path sequences, changed-epoch count, reachability, ping/throughput (when
-packet-level A/B is repeated), and never describe stock `multipath` as a
-separate algorithm because it currently falls back to shortest path.
+The checker summaries include independently validated peak TinyLEO process RSS
+and ping-loss metrics, in addition to host-memory, swap, topology, SRv6, and
+recovery gates. Transcribe only values produced above:
 
-| Routing comparison | Geographic policy | Shortest path |
+| Full 12-epoch metric | Geographic policy | Shortest path |
 |---|---|---|
-| Reachable epochs | PENDING — run on n2-standard-8 | PENDING — run on n2-standard-8 |
-| Path sequences / changed epochs | PENDING — run on n2-standard-8 | PENDING — run on n2-standard-8 |
-| Ping / throughput | PENDING — optional packet-level repeat | PENDING — optional packet-level repeat |
+| Fixed artifact manifest | PENDING — run on n2-standard-8 | PENDING — run on n2-standard-8 |
+| Mean traceroute hops | PENDING | PENDING |
+| Mean ping latency / loss | PENDING | PENDING |
+| Failure-window update interruption | PENDING | PENDING |
+| Peak process RSS / recovery ping loss | PENDING | PENDING |
+| Epoch-6 acknowledged link / replacement | PENDING | PENDING |
+| Overall acceptance | PENDING — run on n2-standard-8 | PENDING — run on n2-standard-8 |
+
+Optionally run `TinyLEONorthboundAPI.find_path` against the immutable grid map
+to explain a packet-level difference. Label it supplementary: it can never
+substitute for either privileged run, acknowledgements, or this comparison.
 
 ## 6. Checksums and archival
 

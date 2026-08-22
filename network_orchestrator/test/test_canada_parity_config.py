@@ -1,4 +1,5 @@
 import inspect
+import importlib.util
 import json
 import os
 import sys
@@ -35,7 +36,8 @@ sys.modules.setdefault(
 
 import sn_orchestrator_mpc
 from southbound import sn_utils
-from southbound.sn_controller import RemoteController
+from southbound import sn_remote
+from southbound.sn_controller import RemoteController, RemoteMachine
 
 
 def _base_config(**overrides):
@@ -769,6 +771,385 @@ class ControllerPlumbingTests(unittest.TestCase):
                 }
             ],
         )
+
+
+class RuntimeAcknowledgementTests(unittest.TestCase):
+    def test_container_creation_passes_dynamic_controller_mount_source(self):
+        calls = []
+
+        class Pyctr:
+            @staticmethod
+            def container_run(base_dir, hostname, controller_source):
+                calls.append((base_dir, hostname, controller_source))
+                return 101 + len(calls)
+
+        with tempfile.TemporaryDirectory(prefix="tinyleo workdir ") as tempdir:
+            controller_source = Path(tempdir) / "controller"
+            controller_source.mkdir()
+            with (
+                mock.patch.object(sn_remote, "pyctr", Pyctr, create=True),
+                mock.patch.object(sn_remote, "machine_id", 0, create=True),
+                mock.patch.object(sn_remote.subprocess, "check_call"),
+                mock.patch.object(sn_remote, "sn_operate_every_node"),
+            ):
+                sn_remote.sn_init_nodes(
+                    tempdir,
+                    [{"SH1SAT1": 0}],
+                    {"GS1": 0},
+                )
+
+        self.assertEqual(len(calls), 2)
+        self.assertTrue(
+            all(call[2] == str(controller_source) for call in calls)
+        )
+        pyctr_source = (
+            PROJECT_ROOT / "southbound" / "pyctr.c"
+        ).read_text(encoding="utf-8")
+        self.assertNotIn("/root/tinyleo-Arbitrary-LeastDelay", pyctr_source)
+
+    def test_pyctr_compile_uses_running_interpreter_without_shell_escaping(self):
+        with (
+            mock.patch.object(
+                sn_remote.sysconfig,
+                "get_config_var",
+                return_value="-O2 -DTEST_VALUE='two words'",
+            ),
+            mock.patch.object(
+                sn_remote.sysconfig,
+                "get_paths",
+                return_value={"include": "/tmp/python include"},
+            ),
+            mock.patch.object(sn_remote.subprocess, "check_call") as check_call,
+        ):
+            sn_remote._compile_pyctr("/tmp/tinyleo workdir")
+
+        command = check_call.call_args.args[0]
+        self.assertEqual(check_call.call_args.kwargs["cwd"], "/tmp/tinyleo workdir")
+        self.assertIn("-I/tmp/python include", command)
+        self.assertIn("-DTEST_VALUE=two words", command)
+        self.assertNotIn("shell", check_call.call_args.kwargs)
+
+    def test_remote_fault_uses_requested_real_link_and_returns_sdn_identity_ack(self):
+        loaded = []
+        acknowledgement = {
+            "failed_link": ["SH1SAT1", "SH1SAT2"],
+            "removed_satellite": "SH1SAT1",
+            "replacement_satellite": "SH1SAT9",
+            "updated_satellites": ["SH1SAT1", "SH1SAT9"],
+        }
+
+        def load_state(name):
+            loaded.append(name)
+            peer = "SH1SAT2" if name == "SH1SAT1" else "SH1SAT1"
+            return {"isls": {peer: []}}
+
+        with (
+            mock.patch.object(sn_remote, "load_topo_from_shm", side_effect=load_state),
+            mock.patch.object(sn_remote, "replace_shared_memory"),
+            mock.patch.object(sn_remote, "sat_link_change"),
+            mock.patch.object(sn_remote, "_failure_report", return_value=acknowledgement),
+            mock.patch.object(sn_remote, "update_link_state"),
+            mock.patch.object(sn_remote, "sn_update_network_muti"),
+        ):
+            actual = sn_remote.fault_test(
+                "/tmp/work",
+                6,
+                [],
+                {},
+                [],
+                200,
+                0,
+                96,
+                0,
+                "SH1SAT1",
+                "SH1SAT2",
+            )
+
+        self.assertEqual(loaded, ["SH1SAT1", "SH1SAT2"])
+        self.assertIs(actual, acknowledgement)
+
+    def test_remote_python_is_configured_and_reaches_remote_machine(self):
+        with tempfile.TemporaryDirectory() as tempdir:
+            config_path = _write_config(
+                tempdir,
+                _base_config(
+                    remote_python="/tmp/tinyleo venv/bin/python",
+                    failure_controller_endpoint="127.0.0.1:50051",
+                ),
+            )
+            args = _load_config(config_path)
+            self.assertEqual(args.remote_python, "/tmp/tinyleo venv/bin/python")
+            self.assertEqual(
+                args.failure_controller_endpoint, "127.0.0.1:50051"
+            )
+
+            with mock.patch.object(sys, "argv", ["test"]):
+                controller = RemoteController(str(config_path), [], {})
+            self.assertEqual(controller.remote_python, "/tmp/tinyleo venv/bin/python")
+            self.assertEqual(
+                controller.failure_controller_endpoint, "127.0.0.1:50051"
+            )
+
+    def test_ssh_nonzero_exit_is_never_silently_accepted(self):
+        class Channel:
+            def recv_exit_status(self):
+                return 17
+
+        class Stream:
+            channel = Channel()
+
+            def __init__(self, value):
+                self.value = value
+
+            def read(self):
+                return self.value
+
+            def __iter__(self):
+                return iter(self.value.decode().splitlines(keepends=True))
+
+        class SSH:
+            def exec_command(self, command, **kwargs):
+                return Stream(b""), Stream(b"partial output\n"), Stream(b"boom\n")
+
+        with self.assertRaisesRegex(RuntimeError, "exit 17.*boom"):
+            sn_utils.sn_remote_cmd(SSH(), "false")
+        with self.assertRaisesRegex(RuntimeError, "exit 17"):
+            sn_utils.sn_remote_wait_output(SSH(), "false")
+
+    def test_remote_machine_commands_use_configured_python(self):
+        commands = []
+        machine = RemoteMachine.__new__(RemoteMachine)
+        machine.id = 0
+        machine.dir = "/root/experiment with spaces"
+        machine.remote_python = "/tmp/venv with spaces/bin/python"
+        machine.failure_controller_endpoint = "127.0.0.1:50051"
+        machine.ssh = object()
+        machine.local_dir = "/tmp/local"
+
+        class SFTP:
+            def get(self, remote, local):
+                pass
+
+        machine.sftp = SFTP()
+        def run(_ssh, command):
+            commands.append(command)
+            if " fault_test " in command:
+                return "TINYLEO_FAILURE_ACK=" + json.dumps(
+                    {
+                        "failed_link": ["SH1SAT1", "SH1SAT2"],
+                        "removed_satellite": "SH1SAT1",
+                        "replacement_satellite": "SH1SAT9",
+                        "updated_satellites": ["SH1SAT1", "SH1SAT9"],
+                    }
+                )
+            return ""
+
+        with mock.patch(
+            "southbound.sn_controller.sn_remote_wait_output", side_effect=run
+        ):
+            machine.init_nodes()
+            acknowledgement = machine.fault_test(
+                6, 200, 0, 96, 0, ("SH1SAT1", "SH1SAT2")
+            )
+
+        self.assertIn("'/tmp/venv with spaces/bin/python'", commands[0])
+        self.assertIn("'/root/experiment with spaces/sn_remote.py'", commands[0])
+        self.assertIn("127.0.0.1:50051", commands[1])
+        self.assertEqual(acknowledgement["remote_id"], 0)
+
+    def test_fault_target_is_deterministic_and_worker_ack_propagates(self):
+        calls = []
+
+        class Remote:
+            id = 0
+
+            def fault_test(self, *args):
+                calls.append(args)
+                failed_link = list(args[-1])
+                return {
+                    "failed_link": failed_link,
+                    "removed_satellite": failed_link[0],
+                    "replacement_satellite": "SH1SAT9",
+                    "updated_satellites": [failed_link[0], "SH1SAT9"],
+                    "remote_id": 0,
+                }
+
+        controller = RemoteController.__new__(RemoteController)
+        controller.remote_lst = [Remote()]
+        controller.nodes = {
+            "SH1SAT1": controller.remote_lst[0],
+            "SH1SAT2": controller.remote_lst[0],
+            "SH1SAT3": controller.remote_lst[0],
+        }
+        controller.all_node_states = {
+            "SH1SAT3": {"isls": {"SH1SAT2": []}},
+            "SH1SAT1": {"isls": {"SH1SAT3": [], "SH1SAT2": []}},
+            "SH1SAT2": {"isls": {"SH1SAT1": [], "SH1SAT3": []}},
+        }
+        controller.ts = 6
+        controller.sat_bandwidth = 200
+        controller.sat_loss = 0
+        controller.sat_ground_bandwidth = 96
+        controller.sat_ground_loss = 0
+
+        first = controller.tinyleo_fault_test()
+        second = controller.tinyleo_fault_test()
+
+        self.assertEqual(first["failed_link"], ["SH1SAT1", "SH1SAT2"])
+        self.assertEqual(second["failed_link"], first["failed_link"])
+        self.assertEqual(tuple(calls[0][-1]), ("SH1SAT1", "SH1SAT2"))
+
+    def test_fault_and_srv6_worker_failures_propagate(self):
+        class Remote:
+            id = 0
+
+            def fault_test(self, *args):
+                raise RuntimeError("remote fault failed")
+
+            def deploy_tinyleo_srv6_agent(self):
+                raise RuntimeError("agent exited")
+
+        controller = RemoteController.__new__(RemoteController)
+        controller.remote_lst = [Remote()]
+        controller.nodes = {"SH1SAT1": controller.remote_lst[0], "SH1SAT2": controller.remote_lst[0]}
+        controller.all_node_states = {
+            "SH1SAT1": {"isls": {"SH1SAT2": []}},
+            "SH1SAT2": {"isls": {"SH1SAT1": []}},
+        }
+        controller.ts = 6
+        controller.sat_bandwidth = 200
+        controller.sat_loss = 0
+        controller.sat_ground_bandwidth = 96
+        controller.sat_ground_loss = 0
+
+        with self.assertRaisesRegex(RuntimeError, "remote fault failed"):
+            controller.tinyleo_fault_test()
+        with self.assertRaisesRegex(RuntimeError, "agent exited"):
+            controller.deploy_tinyleo_srv6_agent()
+
+    def test_link_create_and_topology_update_worker_failures_propagate(self):
+        class Remote:
+            def init_network(self, *_args):
+                raise RuntimeError("link creation failed")
+
+            def update_network(self, *_args):
+                raise RuntimeError("topology update failed")
+
+        controller = RemoteController.__new__(RemoteController)
+        controller.remote_lst = [Remote()]
+        controller.sat_bandwidth = 200
+        controller.sat_loss = 0
+        controller.sat_ground_bandwidth = 96
+        controller.sat_ground_loss = 0
+        controller.ts = 3
+
+        with self.assertRaisesRegex(RuntimeError, "link creation failed"):
+            controller.create_links()
+        with self.assertRaisesRegex(RuntimeError, "topology update failed"):
+            controller.update_remote_topology()
+
+    def test_remote_failure_recovery_process_error_prevents_acknowledgement(self):
+        class Future:
+            def result(self):
+                raise RuntimeError("namespace link mutation failed")
+
+        class Executor:
+            def __init__(self, **_kwargs):
+                pass
+
+            def __enter__(self):
+                return self
+
+            def __exit__(self, *_args):
+                return False
+
+            def submit(self, *_args):
+                return Future()
+
+        with tempfile.TemporaryDirectory() as tempdir:
+            shell = Path(tempdir) / "shell0" / "isl"
+            shell.mkdir(parents=True)
+            (shell / "6.txt").write_text("SH1SAT1|SH1SAT2||\n", encoding="utf-8")
+            with (
+                mock.patch.object(sn_remote, "ProcessPoolExecutor", Executor),
+                mock.patch.object(sn_remote, "machine_id", 0, create=True),
+            ):
+                with self.assertRaisesRegex(
+                    RuntimeError, "namespace link mutation failed"
+                ):
+                    sn_remote.sn_update_network_muti(
+                        tempdir,
+                        6,
+                        [{"SH1SAT1": 0, "SH1SAT2": 0}],
+                        {},
+                        ["127.0.0.1"],
+                        200,
+                        0,
+                        96,
+                        0,
+                        failure=True,
+                    )
+
+    def test_srv6_deployer_uses_dynamic_workdir_and_checks_agent_liveness(self):
+        module_path = (
+            PROJECT_ROOT
+            / "geographic_srv6_anycast"
+            / "deploy_srv6_agent.py"
+        )
+        spec = importlib.util.spec_from_file_location("deploy_srv6_agent_test", module_path)
+        module = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(module)
+
+        with tempfile.TemporaryDirectory() as tempdir:
+            root = Path(tempdir)
+            (root / "container_pid.txt").write_text(
+                "SH1SAT1:101 NA GS1:102\n", encoding="utf-8"
+            )
+            commands = []
+
+            class Process:
+                def __init__(self, command, **kwargs):
+                    commands.append(command)
+
+                def poll(self):
+                    return None
+
+            ack = module.deploy_agents(
+                root,
+                "/tmp/runtime/bin/python",
+                process_factory=Process,
+                sleeper=lambda _seconds: None,
+            )
+
+        self.assertEqual(ack["expected_count"], 2)
+        self.assertEqual(ack["started_count"], 2)
+        self.assertTrue(all("/tmp/runtime/bin/python" in command for command in commands))
+        self.assertTrue(
+            all(
+                "/resources/controller/geographic_srv6_anycast/srv6_agent.py"
+                in command
+                for command in commands
+            )
+        )
+        self.assertTrue(all("/root/tinyleo-Arbitrary-LeastDelay" not in " ".join(command) for command in commands))
+
+        class ExitedProcess:
+            def __init__(self, command, **kwargs):
+                pass
+
+            def poll(self):
+                return 1
+
+        with tempfile.TemporaryDirectory() as tempdir:
+            root = Path(tempdir)
+            (root / "container_pid.txt").write_text("SH1SAT1:101\n", encoding="utf-8")
+            with self.assertRaisesRegex(RuntimeError, "exited during startup"):
+                module.deploy_agents(
+                    root,
+                    "/tmp/runtime/bin/python",
+                    process_factory=ExitedProcess,
+                    sleeper=lambda _seconds: None,
+                )
 
 
 if __name__ == "__main__":
