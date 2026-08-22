@@ -361,7 +361,7 @@ class RemoteController():
         os.makedirs(os.path.join(self.local_dir,'all_node_states'), exist_ok=True)
         with open(os.path.join(self.configuration_dir, 'geopraphic_routing_policy.json')) as f:
             self.geopraphic_routing_policy = json.load(f)
-        with open(os.path.join(self.topo_dir, 'block_positions.json')) as f:
+        with open(self.block_positions_file) as f:
             self.block_positions = json.load(f)
 
     def _assign_remote(self, sat_names_shell, machine_lst):

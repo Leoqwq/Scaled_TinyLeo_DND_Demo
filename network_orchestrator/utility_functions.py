@@ -521,10 +521,12 @@ def create_all_isl_position_json(
     # Initialize result
     result = {"timeslots": []}
     
-    # Get number of timestamps and satellites
-    _, _, _, sat_location0, _ = supply_data[0]
-    num_timestamps = len(sat_location0)
+    # Build only the selected source slice and validate it for every satellite.
+    num_timestamps = len(inter_topology)
     num_satellites = len(supply_data)
+    end_epoch = start_epoch + num_timestamps
+    if start_epoch < 0:
+        raise ValueError("start_epoch must be nonnegative")
     
     # Build satellite position and parameter information
     satellite_locations = {t: {} for t in range(num_timestamps)}
@@ -541,9 +543,15 @@ def create_all_isl_position_json(
             'alpha0': param[2]
         }
         
-        # Store position information
+        if len(sat_location) < end_epoch:
+            raise ValueError(
+                f"satellite {idx} does not contain selected source slice "
+                f"{start_epoch}:{end_epoch}"
+            )
+
+        # Store only positions used by the locally numbered output timeslots.
         for t in range(num_timestamps):
-            satellite_locations[t][idx] = sat_location[t]
+            satellite_locations[t][idx] = sat_location[start_epoch + t]
     
     # Process each timestamp
     for t in range(len(inter_topology)):
@@ -554,7 +562,7 @@ def create_all_isl_position_json(
         
         # Add satellite positions (in satellite ID order)
         for sat_id in range(num_satellites):
-            lon, lat = satellite_locations[start_epoch + t][sat_id]
+            lon, lat = satellite_locations[t][sat_id]
             height = satellite_params[sat_id]['height']
             
             # Convert radians to degrees

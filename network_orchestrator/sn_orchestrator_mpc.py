@@ -26,8 +26,9 @@ from tqdm import tqdm
 from utility_functions import *
 
 # Global caches for topology results
-GLOBAL_INTER_DOMAIN_TOPOLOGY_CACHE = {}  # Inter-domain topology cache {timestamp: topology}
-GLOBAL_INTRA_DOMAIN_TOPOLOGY_CACHE = {}  # Intra-domain topology cache {timestamp: topology}
+# Cache keys are ((artifact paths, source start, source count), local timestamp).
+GLOBAL_INTER_DOMAIN_TOPOLOGY_CACHE = {}
+GLOBAL_INTRA_DOMAIN_TOPOLOGY_CACHE = {}
 used_virtual_nodes = set()  # Global variable to track used virtual nodes
 
 # ISL sustainability assessment (caching for performance)
@@ -927,6 +928,31 @@ def _load_epoch_slice_data(
         num_epochs,
     )
 
+
+def _topology_cache_context(
+    satellite_file,
+    block_positions_file,
+    traffic_matrix_file,
+    grid_satellites_file,
+    start_epoch,
+    num_epochs,
+):
+    artifact_paths = (
+        satellite_file,
+        block_positions_file,
+        traffic_matrix_file,
+        grid_satellites_file,
+    )
+    return (
+        tuple(
+            os.path.realpath(os.path.abspath(os.path.expanduser(os.fspath(path))))
+            for path in artifact_paths
+        ),
+        start_epoch,
+        num_epochs,
+    )
+
+
 def generate_topology_for_timestamp(timestamp, satellite_file, block_positions_file,
                                    traffic_matrix_file, grid_satellites_file,
                                    output_dir, num_processes, start_epoch=0,
@@ -970,6 +996,15 @@ def generate_topology_for_timestamp(timestamp, satellite_file, block_positions_f
         raise ValueError(
             f"local timestamp {timestamp} is outside 0..{selected_epochs - 1}"
         )
+    cache_context = _topology_cache_context(
+        satellite_file,
+        block_positions_file,
+        traffic_matrix_file,
+        grid_satellites_file,
+        start_epoch,
+        selected_epochs,
+    )
+    cache_key = (cache_context, timestamp)
 
     # Record start time
     timestamp_start = time.time()
@@ -982,10 +1017,13 @@ def generate_topology_for_timestamp(timestamp, satellite_file, block_positions_f
     
     try:
         # Check if timestamp already processed
-        if timestamp in GLOBAL_INTER_DOMAIN_TOPOLOGY_CACHE and timestamp in GLOBAL_INTRA_DOMAIN_TOPOLOGY_CACHE:
+        if (
+            cache_key in GLOBAL_INTER_DOMAIN_TOPOLOGY_CACHE
+            and cache_key in GLOBAL_INTRA_DOMAIN_TOPOLOGY_CACHE
+        ):
             print(f"Using cached topology data for timestamp {timestamp}")
-            inter_topology = GLOBAL_INTER_DOMAIN_TOPOLOGY_CACHE[timestamp]
-            intra_topology = GLOBAL_INTRA_DOMAIN_TOPOLOGY_CACHE[timestamp]
+            inter_topology = GLOBAL_INTER_DOMAIN_TOPOLOGY_CACHE[cache_key]
+            intra_topology = GLOBAL_INTRA_DOMAIN_TOPOLOGY_CACHE[cache_key]
             
             # Data exists, just save and return
             # Load necessary data
@@ -1015,10 +1053,11 @@ def generate_topology_for_timestamp(timestamp, satellite_file, block_positions_f
         # Check if previous timestamp topology needed
         previous_topology = None
         if timestamp > 0:
+            previous_cache_key = (cache_context, timestamp - 1)
             # First check global cache
-            if timestamp-1 in GLOBAL_INTER_DOMAIN_TOPOLOGY_CACHE:
+            if previous_cache_key in GLOBAL_INTER_DOMAIN_TOPOLOGY_CACHE:
                 print(f"Getting topology for timestamp {timestamp-1} from cache")
-                previous_topology = GLOBAL_INTER_DOMAIN_TOPOLOGY_CACHE[timestamp-1]
+                previous_topology = GLOBAL_INTER_DOMAIN_TOPOLOGY_CACHE[previous_cache_key]
             else:
                 # Recursively process previous timestamp
                 print(f"Topology for timestamp {timestamp-1} not found, will process recursively")
@@ -1112,8 +1151,8 @@ def generate_topology_for_timestamp(timestamp, satellite_file, block_positions_f
         total_topology_time = inter_domain_time + intra_domain_time  # milliseconds
         
         # Save topology results to global cache
-        GLOBAL_INTER_DOMAIN_TOPOLOGY_CACHE[timestamp] = inter_topology
-        GLOBAL_INTRA_DOMAIN_TOPOLOGY_CACHE[timestamp] = intra_topology
+        GLOBAL_INTER_DOMAIN_TOPOLOGY_CACHE[cache_key] = inter_topology
+        GLOBAL_INTRA_DOMAIN_TOPOLOGY_CACHE[cache_key] = intra_topology
         
         # Save topology results to file
         os.makedirs(output_dir, exist_ok=True)

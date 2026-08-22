@@ -442,6 +442,160 @@ class EpochSliceTests(unittest.TestCase):
                 timeslot["position"][0]["longitude"], np.degrees(2.1)
             )
 
+    def test_generation_cache_isolated_by_artifacts_and_source_window(self):
+        with tempfile.TemporaryDirectory() as tempdir:
+            root = Path(tempdir)
+            (root / "artifacts-a").mkdir()
+            (root / "artifacts-b").mkdir()
+            artifacts_a = _write_epoch_artifacts(root / "artifacts-a")
+            artifacts_b = _write_epoch_artifacts(root / "artifacts-b")
+            satellite_b = np.load(artifacts_b[0], allow_pickle=True)
+            for row in satellite_b:
+                row[3] = [
+                    [position[0] + 10.0, position[1]] for position in row[3]
+                ]
+            np.save(artifacts_b[0], satellite_b, allow_pickle=True)
+            observed = []
+
+            def first_timestamp(
+                traffic,
+                grid_satellites,
+                satellite_params,
+                satellite_locations,
+                timestamp,
+                num_satellites,
+                pool,
+            ):
+                observed.append(
+                    (
+                        satellite_locations[timestamp][0][0],
+                        grid_satellites[timestamp][23],
+                    )
+                )
+                return []
+
+            with (
+                mock.patch.object(sn_orchestrator_mpc, "Pool", _InlinePool),
+                mock.patch.object(
+                    sn_orchestrator_mpc,
+                    "process_first_timestamp",
+                    first_timestamp,
+                ),
+                mock.patch.object(
+                    sn_orchestrator_mpc,
+                    "process_single_timestamp_topologies",
+                    return_value={},
+                ),
+            ):
+                for artifacts, start_epoch, output_name in (
+                    (artifacts_a, 0, "a-window-0"),
+                    (artifacts_a, 1, "a-window-1"),
+                    (artifacts_b, 1, "b-window-1"),
+                ):
+                    satellite, traffic, grid, blocks = artifacts
+                    sn_orchestrator_mpc.generate_topology_for_timestamp(
+                        0,
+                        str(satellite),
+                        str(blocks),
+                        str(traffic),
+                        str(grid),
+                        str(root / output_name),
+                        2,
+                        start_epoch=start_epoch,
+                        num_epochs=1,
+                    )
+
+            self.assertEqual(
+                observed,
+                [
+                    (0.1, [0]),
+                    (1.1, [1]),
+                    (11.1, [1]),
+                ],
+            )
+
+    def test_consolidated_serialization_reads_only_selected_source_slice(self):
+        supply_data = np.empty((2, 5), dtype=object)
+        supply_data[0] = [
+            [573.0, 1.2, 0.3],
+            [0],
+            None,
+            [[epoch * 0.1, 0.0] for epoch in range(5)],
+            1,
+        ]
+        supply_data[1] = [
+            [573.0, 1.2, 0.3],
+            [1],
+            None,
+            [[1.0 + epoch * 0.1, 0.0] for epoch in range(3)],
+            1,
+        ]
+        inter_topology = {0: [], 1: []}
+        intra_topology = {0: {}, 1: {}}
+
+        with tempfile.TemporaryDirectory() as tempdir:
+            try:
+                sn_orchestrator_mpc.create_all_isl_position_json(
+                    supply_data,
+                    inter_topology,
+                    intra_topology,
+                    tempdir,
+                    start_epoch=1,
+                )
+            except IndexError as exc:
+                self.fail(f"serializer read beyond selected source slice: {exc}")
+
+            payload = json.loads(
+                (Path(tempdir) / "predict_isl_position_all.json").read_text(
+                    encoding="utf-8"
+                )
+            )
+
+        self.assertEqual(len(payload["timeslots"]), 2)
+        self.assertEqual(
+            [
+                [
+                    timeslot["position"][satellite_id]["longitude"]
+                    for satellite_id in range(2)
+                ]
+                for timeslot in payload["timeslots"]
+            ],
+            [
+                [5.729577951308233, 63.02535746439056],
+                [11.459155902616466, 68.75493541569878],
+            ],
+        )
+
+    def test_consolidated_serialization_validates_selected_slice_per_satellite(self):
+        supply_data = np.empty((2, 5), dtype=object)
+        supply_data[0] = [
+            [573.0, 1.2, 0.3],
+            [0],
+            None,
+            [[epoch * 0.1, 0.0] for epoch in range(4)],
+            1,
+        ]
+        supply_data[1] = [
+            [573.0, 1.2, 0.3],
+            [1],
+            None,
+            [[1.0 + epoch * 0.1, 0.0] for epoch in range(2)],
+            1,
+        ]
+
+        with tempfile.TemporaryDirectory() as tempdir:
+            with self.assertRaisesRegex(
+                ValueError,
+                "satellite 1.*selected source slice 1:3",
+            ):
+                sn_orchestrator_mpc.create_all_isl_position_json(
+                    supply_data,
+                    {0: [], 1: []},
+                    {0: {}, 1: {}},
+                    tempdir,
+                    start_epoch=1,
+                )
+
 
 class ControllerPlumbingTests(unittest.TestCase):
     def test_controller_forwards_configured_paths_workers_and_epochs(self):
@@ -520,6 +674,42 @@ class ControllerPlumbingTests(unittest.TestCase):
                     ),
                 ],
             )
+
+    def test_init_local_reads_configured_block_positions_file(self):
+        with tempfile.TemporaryDirectory() as tempdir:
+            root = Path(tempdir)
+            config_dir = root / "config"
+            legacy_topology_dir = root / "legacy-topology"
+            configured_blocks = root / "configured-blocks.json"
+            legacy_topology_dir.mkdir()
+            configured_blocks.write_text(
+                json.dumps({"source": "configured"}), encoding="utf-8"
+            )
+            (legacy_topology_dir / "block_positions.json").write_text(
+                json.dumps({"source": "legacy"}), encoding="utf-8"
+            )
+            (config_dir / "geopraphic_routing_policy.json").parent.mkdir(
+                parents=True, exist_ok=True
+            )
+            (config_dir / "geopraphic_routing_policy.json").write_text(
+                "{}", encoding="utf-8"
+            )
+            config_path = _write_config(
+                config_dir,
+                _base_config(
+                    topo_dir=str(legacy_topology_dir),
+                    block_positions_file="../configured-blocks.json",
+                ),
+            )
+
+            with mock.patch.object(sys, "argv", ["test"]):
+                controller = RemoteController(str(config_path), [], {})
+            controller.local_dir = str(root / "output")
+            controller.shell_lst = []
+
+            controller._init_local()
+
+            self.assertEqual(controller.block_positions, {"source": "configured"})
 
     def test_local_machine_key_reaches_paramiko_without_a_password(self):
         remote_signature = inspect.signature(sn_utils.sn_connect_remote)
