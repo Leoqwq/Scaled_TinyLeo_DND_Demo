@@ -1,0 +1,266 @@
+{
+  "version": "1.1",
+  "description": "TinyLEO Geographic TE \u2014 DND Part 2 QoS/priority centralized routing (replaces default shortest_path)",
+  "grid_config": {
+    "rows": 11,
+    "cols": 11
+  },
+  "global_settings": {
+    "isl_capacity_gbps": 200.0,
+    "default_routing_policy": "qos_priority"
+  },
+  "traffic_demands": [
+    {
+      "source": 30,
+      "destination": 27,
+      "demand_gbps": 800.0,
+      "routing_policy": "qos_priority",
+      "priority": 5,
+      "service_class": "C2",
+      "avoid_cells": [
+        28,
+        29,
+        38,
+        39,
+        49,
+        50,
+        60
+      ]
+    },
+    {
+      "source": 30,
+      "destination": 39,
+      "demand_gbps": 4136.0,
+      "routing_policy": "qos_priority",
+      "priority": 4,
+      "service_class": "ISR",
+      "avoid_cells": [
+        28,
+        29,
+        38,
+        49,
+        50,
+        60
+      ]
+    },
+    {
+      "source": 30,
+      "destination": 61,
+      "demand_gbps": 162.0,
+      "routing_policy": "qos_priority",
+      "priority": 3,
+      "service_class": "telemetry",
+      "avoid_cells": [
+        28,
+        29,
+        38,
+        39,
+        49,
+        50,
+        60
+      ]
+    },
+    {
+      "source": 30,
+      "destination": 24,
+      "demand_gbps": 41888.0,
+      "routing_policy": "qos_priority",
+      "priority": 2,
+      "service_class": "bulk",
+      "avoid_cells": [
+        28,
+        29,
+        38,
+        39,
+        49,
+        50,
+        60
+      ]
+    },
+    {
+      "source": 30,
+      "destination": 87,
+      "demand_gbps": 2516.0,
+      "routing_policy": "qos_priority",
+      "priority": 1,
+      "service_class": "best_effort",
+      "avoid_cells": [
+        28,
+        29,
+        38,
+        39,
+        49,
+        50,
+        60
+      ]
+    },
+    {
+      "source": 39,
+      "destination": 27,
+      "demand_gbps": 1200.0,
+      "routing_policy": "qos_priority",
+      "priority": 5,
+      "service_class": "C2",
+      "avoid_cells": [
+        28,
+        29,
+        38,
+        49,
+        50,
+        60
+      ]
+    },
+    {
+      "source": 39,
+      "destination": 61,
+      "demand_gbps": 524.0,
+      "routing_policy": "qos_priority",
+      "priority": 3,
+      "service_class": "telemetry",
+      "avoid_cells": [
+        28,
+        29,
+        38,
+        49,
+        50,
+        60
+      ]
+    },
+    {
+      "source": 27,
+      "destination": 61,
+      "demand_gbps": 21316.0,
+      "routing_policy": "qos_priority",
+      "priority": 2,
+      "service_class": "bulk",
+      "avoid_cells": [
+        28,
+        29,
+        38,
+        39,
+        49,
+        50,
+        60
+      ]
+    },
+    {
+      "source": 27,
+      "destination": 69,
+      "demand_gbps": 126.0,
+      "routing_policy": "qos_priority",
+      "priority": 4,
+      "service_class": "ISR",
+      "avoid_cells": [
+        28,
+        29,
+        38,
+        39,
+        49,
+        50,
+        60
+      ]
+    },
+    {
+      "source": 27,
+      "destination": 24,
+      "demand_gbps": 28340.0,
+      "routing_policy": "qos_priority",
+      "priority": 1,
+      "service_class": "best_effort",
+      "avoid_cells": [
+        28,
+        29,
+        38,
+        39,
+        49,
+        50,
+        60
+      ]
+    },
+    {
+      "source": 27,
+      "destination": 87,
+      "demand_gbps": 20.0,
+      "routing_policy": "qos_priority",
+      "priority": 5,
+      "service_class": "C2",
+      "avoid_cells": [
+        28,
+        29,
+        38,
+        39,
+        49,
+        50,
+        60
+      ]
+    },
+    {
+      "source": 61,
+      "destination": 69,
+      "demand_gbps": 150.0,
+      "routing_policy": "qos_priority",
+      "priority": 3,
+      "service_class": "telemetry",
+      "avoid_cells": [
+        28,
+        29,
+        38,
+        39,
+        49,
+        50,
+        60
+      ]
+    },
+    {
+      "source": 61,
+      "destination": 24,
+      "demand_gbps": 33.0,
+      "routing_policy": "qos_priority",
+      "priority": 4,
+      "service_class": "ISR",
+      "avoid_cells": [
+        28,
+        29,
+        38,
+        39,
+        49,
+        50,
+        60
+      ]
+    },
+    {
+      "source": 69,
+      "destination": 24,
+      "demand_gbps": 71701.0,
+      "routing_policy": "qos_priority",
+      "priority": 1,
+      "service_class": "best_effort",
+      "avoid_cells": [
+        28,
+        29,
+        38,
+        39,
+        49,
+        50,
+        60
+      ]
+    },
+    {
+      "source": 24,
+      "destination": 87,
+      "demand_gbps": 5349.0,
+      "routing_policy": "qos_priority",
+      "priority": 2,
+      "service_class": "bulk",
+      "avoid_cells": [
+        28,
+        29,
+        38,
+        39,
+        49,
+        50,
+        60
+      ]
+    }
+  ]
+}

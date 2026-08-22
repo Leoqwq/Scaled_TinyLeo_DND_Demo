@@ -1,0 +1,12 @@
+{
+  "baseline": "A_shortest_path",
+  "comparisons": [
+    {
+      "scenario": "B_qos_priority",
+      "paths_changed": 7,
+      "hops_changed": 0,
+      "paths_total": 15,
+      "mean_hops_delta": 0.0
+    }
+  ]
+}

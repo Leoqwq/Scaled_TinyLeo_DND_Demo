@@ -1,0 +1,137 @@
+{
+  "30-27": {
+    "budget_violated": false,
+    "used_fallback": false,
+    "estimated_latency_ms": 75.0,
+    "max_latency_ms": null,
+    "hops": 3,
+    "empty_transit_cells": [],
+    "reason": ""
+  },
+  "39-27": {
+    "budget_violated": false,
+    "used_fallback": false,
+    "estimated_latency_ms": 50.0,
+    "max_latency_ms": null,
+    "hops": 2,
+    "empty_transit_cells": [],
+    "reason": ""
+  },
+  "27-87": {
+    "budget_violated": false,
+    "used_fallback": false,
+    "estimated_latency_ms": 250.0,
+    "max_latency_ms": null,
+    "hops": 10,
+    "empty_transit_cells": [],
+    "reason": ""
+  },
+  "30-39": {
+    "budget_violated": false,
+    "used_fallback": false,
+    "estimated_latency_ms": 75.0,
+    "max_latency_ms": null,
+    "hops": 3,
+    "empty_transit_cells": [],
+    "reason": ""
+  },
+  "27-69": {
+    "budget_violated": false,
+    "used_fallback": false,
+    "estimated_latency_ms": 150.0,
+    "max_latency_ms": null,
+    "hops": 6,
+    "empty_transit_cells": [],
+    "reason": ""
+  },
+  "61-24": {
+    "budget_violated": false,
+    "used_fallback": false,
+    "estimated_latency_ms": 175.0,
+    "max_latency_ms": null,
+    "hops": 7,
+    "empty_transit_cells": [],
+    "reason": ""
+  },
+  "30-61": {
+    "budget_violated": false,
+    "used_fallback": false,
+    "estimated_latency_ms": 125.0,
+    "max_latency_ms": null,
+    "hops": 5,
+    "empty_transit_cells": [],
+    "reason": ""
+  },
+  "39-61": {
+    "budget_violated": false,
+    "used_fallback": false,
+    "estimated_latency_ms": 50.0,
+    "max_latency_ms": null,
+    "hops": 2,
+    "empty_transit_cells": [],
+    "reason": ""
+  },
+  "61-69": {
+    "budget_violated": false,
+    "used_fallback": false,
+    "estimated_latency_ms": 100.0,
+    "max_latency_ms": null,
+    "hops": 4,
+    "empty_transit_cells": [],
+    "reason": ""
+  },
+  "30-24": {
+    "budget_violated": false,
+    "used_fallback": false,
+    "estimated_latency_ms": 125.0,
+    "max_latency_ms": null,
+    "hops": 5,
+    "empty_transit_cells": [],
+    "reason": ""
+  },
+  "27-61": {
+    "budget_violated": false,
+    "used_fallback": false,
+    "estimated_latency_ms": 100.0,
+    "max_latency_ms": null,
+    "hops": 4,
+    "empty_transit_cells": [],
+    "reason": ""
+  },
+  "24-87": {
+    "budget_violated": false,
+    "used_fallback": false,
+    "estimated_latency_ms": 200.0,
+    "max_latency_ms": null,
+    "hops": 8,
+    "empty_transit_cells": [],
+    "reason": ""
+  },
+  "30-87": {
+    "budget_violated": false,
+    "used_fallback": false,
+    "estimated_latency_ms": 175.0,
+    "max_latency_ms": null,
+    "hops": 7,
+    "empty_transit_cells": [],
+    "reason": ""
+  },
+  "27-24": {
+    "budget_violated": false,
+    "used_fallback": false,
+    "estimated_latency_ms": 75.0,
+    "max_latency_ms": null,
+    "hops": 3,
+    "empty_transit_cells": [],
+    "reason": ""
+  },
+  "69-24": {
+    "budget_violated": false,
+    "used_fallback": false,
+    "estimated_latency_ms": 125.0,
+    "max_latency_ms": null,
+    "hops": 5,
+    "empty_transit_cells": [],
+    "reason": ""
+  }
+}

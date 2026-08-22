@@ -1,0 +1,122 @@
+{
+  "30-27": {
+    "budget_violated": true,
+    "used_fallback": true,
+    "estimated_latency_ms": 75.0,
+    "max_latency_ms": 50.0,
+    "hops": 3,
+    "reason": "no feasible path within latency/avoid constraints"
+  },
+  "39-27": {
+    "budget_violated": false,
+    "used_fallback": false,
+    "estimated_latency_ms": 50.0,
+    "max_latency_ms": 50.0,
+    "hops": 2,
+    "reason": ""
+  },
+  "27-87": {
+    "budget_violated": true,
+    "used_fallback": true,
+    "estimated_latency_ms": 250.0,
+    "max_latency_ms": 50.0,
+    "hops": 10,
+    "reason": "no feasible path within latency/avoid constraints"
+  },
+  "30-39": {
+    "budget_violated": false,
+    "used_fallback": false,
+    "estimated_latency_ms": 75.0,
+    "max_latency_ms": null,
+    "hops": 3,
+    "reason": ""
+  },
+  "27-69": {
+    "budget_violated": false,
+    "used_fallback": false,
+    "estimated_latency_ms": 150.0,
+    "max_latency_ms": null,
+    "hops": 6,
+    "reason": ""
+  },
+  "61-24": {
+    "budget_violated": false,
+    "used_fallback": false,
+    "estimated_latency_ms": 175.0,
+    "max_latency_ms": null,
+    "hops": 7,
+    "reason": ""
+  },
+  "30-61": {
+    "budget_violated": false,
+    "used_fallback": false,
+    "estimated_latency_ms": 125.0,
+    "max_latency_ms": null,
+    "hops": 5,
+    "reason": ""
+  },
+  "39-61": {
+    "budget_violated": false,
+    "used_fallback": false,
+    "estimated_latency_ms": 50.0,
+    "max_latency_ms": null,
+    "hops": 2,
+    "reason": ""
+  },
+  "61-69": {
+    "budget_violated": false,
+    "used_fallback": false,
+    "estimated_latency_ms": 100.0,
+    "max_latency_ms": null,
+    "hops": 4,
+    "reason": ""
+  },
+  "30-24": {
+    "budget_violated": false,
+    "used_fallback": false,
+    "estimated_latency_ms": 125.0,
+    "max_latency_ms": null,
+    "hops": 5,
+    "reason": ""
+  },
+  "27-61": {
+    "budget_violated": false,
+    "used_fallback": false,
+    "estimated_latency_ms": 100.0,
+    "max_latency_ms": null,
+    "hops": 4,
+    "reason": ""
+  },
+  "24-87": {
+    "budget_violated": false,
+    "used_fallback": false,
+    "estimated_latency_ms": 200.0,
+    "max_latency_ms": null,
+    "hops": 8,
+    "reason": ""
+  },
+  "30-87": {
+    "budget_violated": false,
+    "used_fallback": false,
+    "estimated_latency_ms": 175.0,
+    "max_latency_ms": null,
+    "hops": 7,
+    "reason": ""
+  },
+  "27-24": {
+    "budget_violated": false,
+    "used_fallback": false,
+    "estimated_latency_ms": 75.0,
+    "max_latency_ms": null,
+    "hops": 3,
+    "reason": ""
+  },
+  "69-24": {
+    "budget_violated": false,
+    "used_fallback": false,
+    "estimated_latency_ms": 175.0,
+    "max_latency_ms": null,
+    "hops": 7,
+    "reason": ""
+  }
+}

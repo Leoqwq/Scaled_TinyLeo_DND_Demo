@@ -1,0 +1,21 @@
+{
+  "is_connected": false,
+  "path_reachability": {
+    "30-27": true,
+    "30-39": true,
+    "30-61": true,
+    "30-24": true,
+    "30-87": true,
+    "39-27": true,
+    "39-61": true,
+    "27-61": true,
+    "27-69": true,
+    "27-24": true,
+    "27-87": true,
+    "61-69": true,
+    "61-24": true,
+    "69-24": true,
+    "24-87": true,
+    "0-1": true
+  }
+}

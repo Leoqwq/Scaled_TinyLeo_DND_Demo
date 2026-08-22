@@ -1,0 +1,22 @@
+[
+  {
+    "scenario":"A_shortest_path",
+    "mean_hops":4.933,
+    "mean_hops_delta_vs_first":0.0,
+    "paths_changed_vs_first":0,
+    "path_volume_Gbps":819486.0,
+    "isl_req_total":4114.0,
+    "connected":true,
+    "num_paths":15
+  },
+  {
+    "scenario":"B_qos_priority",
+    "mean_hops":4.933,
+    "mean_hops_delta_vs_first":0.0,
+    "paths_changed_vs_first":7,
+    "path_volume_Gbps":819486.0,
+    "isl_req_total":4118.0,
+    "connected":true,
+    "num_paths":15
+  }
+]

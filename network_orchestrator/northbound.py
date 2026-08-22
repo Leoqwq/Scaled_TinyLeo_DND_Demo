@@ -48,6 +48,7 @@ class TinyLEONorthboundAPI:
         self.scaled_isl_matrix = None
         self.scaling_factor = None
         self.paths = {}
+        self.path_status = {}  # per-demand QoS feasibility / budget flags
         self._load_config()
     
     def _load_config(self) -> None:
@@ -202,10 +203,17 @@ class TinyLEONorthboundAPI:
         Returns:
             list: Ordered list of grid IDs representing the path
         """
-        routing_policy = demand.get('routing_policy', 'shortest_path')
+        routing_policy = demand.get('routing_policy', 'qos_priority')
         
-        if routing_policy not in ['shortest_path', 'oceanic_offload', 'geo_avoid', 'multipath']:
-            routing_policy = 'shortest_path'  # Default to shortest path
+        allowed = [
+            'shortest_path',
+            'oceanic_offload',
+            'geo_avoid',
+            'multipath',
+            'qos_priority',  # DND Part 2: centralized QoS / priority routing
+        ]
+        if routing_policy not in allowed:
+            routing_policy = 'qos_priority'
         
         # Call appropriate path finding method based on policy
         if routing_policy == 'shortest_path':
@@ -214,18 +222,29 @@ class TinyLEONorthboundAPI:
             return self.find_oceanic_path(start, end, demand)
         elif routing_policy == 'geo_avoid':
             return self.find_avoiding_path(start, end, demand)
+        elif routing_policy == 'qos_priority':
+            return self.find_qos_priority_path(start, end, demand)
         elif routing_policy == 'multipath':
-            # For multipath, just return the shortest path for now
-            # In a future implementation, this would generate multiple paths
+            # Not implemented: TinyLEO stock multipath == shortest_path.
+            # Use qos_priority for Part 2 differentiated routing.
+            print(
+                "Warning: routing_policy='multipath' is not implemented; "
+                "falling back to shortest_path (results will look identical)."
+            )
             return self.find_shortest_path(start, end)
     
-    def find_shortest_path(self, start: int, end: int) -> list:
+    def find_shortest_path(
+        self, start: int, end: int, avoid_empty_cells: bool = False
+    ) -> list:
         """
         Find the shortest path using a modified Dijkstra's algorithm.
-        
+
         Args:
             start: Source grid ID
             end: Destination grid ID
+            avoid_empty_cells: If True, skip cells with zero satellite coverage
+                (except the endpoints). Used by QoS fallback so we do not return
+                physically unroutable geographic paths.
             
         Returns:
             list: Ordered list of grid IDs representing the shortest path
@@ -246,6 +265,15 @@ class TinyLEONorthboundAPI:
                 continue
                 
             for neighbor in self.get_neighbors(current):
+                if avoid_empty_cells:
+                    # Block empty transit cells; endpoints may still be used
+                    if (
+                        neighbor not in (start, end)
+                        and self._cell_satellite_count(neighbor) <= 0
+                    ):
+                        continue
+                    if self._edge_parallel_links(current, neighbor) <= 0:
+                        continue
                 edge_weight = self.calculate_edge_weight(current, neighbor)
                 distance = current_distance + edge_weight
                 
@@ -374,6 +402,220 @@ class TinyLEONorthboundAPI:
             return self.find_shortest_path(start, end)
             
         return path[::-1]
+
+    def _cell_satellite_count(self, grid_id: int) -> int:
+        """Satellites covering a cell (0 = physically empty / unroutable transit)."""
+        return int(self.grid_density.get(grid_id, 0) or 0)
+
+    def _edge_parallel_links(self, grid1: int, grid2: int) -> int:
+        """
+        Parallel ISLs available on a cell-cell edge.
+
+        Bottleneck model: an edge cannot have more concurrent ISLs than the
+        scarcer of the two cells (same capacity intuition as TinyLEO density).
+        """
+        return max(0, min(self._cell_satellite_count(grid1), self._cell_satellite_count(grid2)))
+
+    def _edge_capacity_gbps(self, grid1: int, grid2: int) -> float:
+        """Aggregate edge capacity = per-ISL capacity × parallel links."""
+        isl_cap = float(
+            self.config.get("global_settings", {}).get("isl_capacity_gbps", 200.0)
+        )
+        n_par = self._edge_parallel_links(grid1, grid2)
+        if n_par <= 0:
+            return 0.0
+        return isl_cap * float(n_par)
+
+    def calculate_qos_edge_weight(
+        self,
+        grid1: int,
+        grid2: int,
+        demand: Dict,
+        load_so_far: Optional[Dict[Tuple[int, int], float]] = None,
+    ) -> float:
+        """
+        Centralized QoS / priority edge cost for DND Part 2 routing replacement.
+
+        Cost model (after density/utilization correction):
+          w = α (δ/τ) + γ r + δ_util μ
+
+        - Density enters as *supply*: edge capacity = isl_capacity_gbps × parallel
+          links, with parallel links = min(density[u], density[v]).
+        - Utilization μ = reserved_load / edge_capacity (not / single ISL).
+        - Sparse fragility stays only in the risk term r (no separate coverage
+          cost — that double-counted density and fought the supply model).
+        - Empty cells (0 satellites) are hard-infeasible (weight = ∞).
+        """
+        priority = float(demand.get("priority", 3))
+        priority = max(1.0, min(5.0, priority))
+        p_norm = (priority - 1.0) / 4.0
+
+        avoid_cells = set(demand.get("avoid_cells", []) or [])
+        if grid1 in avoid_cells or grid2 in avoid_cells:
+            return float("inf")
+
+        # Physically unroutable: no satellites on either side of the edge
+        n_par = self._edge_parallel_links(grid1, grid2)
+        if n_par <= 0:
+            return float("inf")
+
+        approx_hop_ms = float(demand.get("approx_hop_ms", 25.0))
+        delay = approx_hop_ms
+
+        max_density = max(self.grid_density.values()) if self.grid_density else 1.0
+        max_density = max(float(max_density), 1e-9)
+        avg_density = (
+            self._cell_satellite_count(grid1) + self._cell_satellite_count(grid2)
+        ) / 2.0
+        coverage_deficit = 1.0 - min(avg_density / max_density, 1.0)
+
+        load = 0.0
+        if load_so_far is not None:
+            a, b = (grid1, grid2) if grid1 < grid2 else (grid2, grid1)
+            load = float(load_so_far.get((a, b), 0.0))
+        edge_cap = self._edge_capacity_gbps(grid1, grid2)
+        utilization = load / max(edge_cap, 1e-9)
+
+        row1, col1 = grid1 // self.grid_cols, grid1 % self.grid_cols
+        row2, col2 = grid2 // self.grid_cols, grid2 % self.grid_cols
+        wraps = (col1 == 0 and col2 == self.grid_cols - 1) or (
+            col1 == self.grid_cols - 1 and col2 == 0
+        )
+        risk = (0.35 if wraps else 0.0) + 0.65 * coverage_deficit
+
+        alpha = float(demand.get("alpha", 1.0 + 1.5 * p_norm))
+        gamma = float(demand.get("gamma", 0.25 + 1.75 * p_norm))
+        delta = float(demand.get("delta", 0.5 + 2.0 * p_norm))
+
+        return (
+            alpha * (delay / approx_hop_ms)
+            + gamma * risk
+            + delta * utilization
+        )
+
+    def find_qos_priority_path(self, start: int, end: int, demand: Dict) -> list:
+        """
+        QoS/priority-aware geographic path selection (centralized controller).
+
+        Replaces default shortest-path routing for mission-aware LEO control:
+        Command-and-Control (high priority) gets low-delay, well-covered routes;
+        best-effort traffic is steered onto residual capacity.
+
+        If a latency budget cannot be met, falls back to shortest path but records
+        budget_violated / used_fallback in self.path_status[(start, end)].
+        """
+        key = (start, end)
+        approx_hop_ms = float(demand.get("approx_hop_ms", 25.0))
+        max_latency_ms = demand.get("max_latency_ms")
+
+        def _record_status(path: list, *, used_fallback: bool, reason: str = "") -> list:
+            hops = max(len(path) - 1, 0)
+            est_ms = hops * approx_hop_ms
+            budget_violated = False
+            if max_latency_ms is not None:
+                budget_violated = est_ms > float(max_latency_ms) + 1e-9
+            empty_transit = [
+                c
+                for c in path[1:-1]
+                if self._cell_satellite_count(c) <= 0
+            ]
+            status = {
+                "budget_violated": budget_violated,
+                "used_fallback": used_fallback,
+                "estimated_latency_ms": est_ms,
+                "max_latency_ms": float(max_latency_ms) if max_latency_ms is not None else None,
+                "hops": hops,
+                "empty_transit_cells": empty_transit,
+                "reason": reason,
+            }
+            self.path_status[key] = status
+            if budget_violated or used_fallback or empty_transit:
+                print(
+                    f"Warning: QoS path {start}->{end}: "
+                    f"fallback={used_fallback}, budget_violated={budget_violated}, "
+                    f"empty_transit={empty_transit}, "
+                    f"est={est_ms:.0f}ms, budget="
+                    f"{max_latency_ms if max_latency_ms is not None else 'none'}"
+                    + (f" ({reason})" if reason else "")
+                )
+            return path
+
+        avoid_cells = set(demand.get("avoid_cells", []) or [])
+        if start in avoid_cells or end in avoid_cells:
+            return _record_status(
+                self.find_shortest_path(start, end, avoid_empty_cells=True),
+                used_fallback=True,
+                reason="endpoint listed in avoid_cells",
+            )
+
+        # Track load already reserved by previously routed demands in this generation pass
+        if not hasattr(self, "_qos_edge_load"):
+            self._qos_edge_load = {}
+
+        max_hops = None
+        if max_latency_ms is not None:
+            max_hops = max(1, int(float(max_latency_ms) // approx_hop_ms))
+
+        num_grids = self.grid_rows * self.grid_cols
+        distances = {i: float("inf") for i in range(num_grids)}
+        distances[start] = 0.0
+        hops = {start: 0}
+        pq = [(0.0, start)]
+        previous = {start: None}
+
+        while pq:
+            current_distance, current = heapq.heappop(pq)
+            if current == end:
+                break
+            if current_distance > distances[current]:
+                continue
+            if max_hops is not None and hops[current] >= max_hops:
+                continue
+
+            for neighbor in self.get_neighbors(current):
+                if neighbor in avoid_cells:
+                    continue
+                # Skip empty transit cells (physically unroutable)
+                if (
+                    neighbor not in (start, end)
+                    and self._cell_satellite_count(neighbor) <= 0
+                ):
+                    continue
+                edge_weight = self.calculate_qos_edge_weight(
+                    current, neighbor, demand, self._qos_edge_load
+                )
+                if not math.isfinite(edge_weight):
+                    continue
+                distance = current_distance + edge_weight
+                if distance < distances[neighbor]:
+                    distances[neighbor] = distance
+                    previous[neighbor] = current
+                    hops[neighbor] = hops[current] + 1
+                    heapq.heappush(pq, (distance, neighbor))
+
+        path = []
+        current = end
+        while current is not None:
+            path.append(current)
+            current = previous.get(current)
+
+        if not path or path[-1] != start:
+            return _record_status(
+                self.find_shortest_path(start, end, avoid_empty_cells=True),
+                used_fallback=True,
+                reason="no feasible path within latency/avoid constraints",
+            )
+
+        path = path[::-1]
+
+        # Reserve demand on path edges so later (lower-priority) flows see the load
+        flow = float(demand.get("demand_gbps", 0.0))
+        for i in range(len(path) - 1):
+            a, b = path[i], path[i + 1]
+            edge = (a, b) if a < b else (b, a)
+            self._qos_edge_load[edge] = self._qos_edge_load.get(edge, 0.0) + flow
+
+        return _record_status(path, used_fallback=False, reason="")
     
     def generate_traffic_matrix(self, grid_satellites_file: str = None) -> np.ndarray:
         """
@@ -394,9 +636,18 @@ class TinyLEONorthboundAPI:
             
         num_grids = self.grid_rows * self.grid_cols
         traffic_matrix = np.zeros((num_grids, num_grids), dtype=float)
+
+        # Reset QoS load state for this generation pass (centralized controller)
+        self._qos_edge_load = {}
+        self.paths = {}
+        self.path_status = {}
+
+        # Route higher-priority demands first so they claim better paths
+        demands = list(self.config.get("traffic_demands", []))
+        demands.sort(key=lambda d: float(d.get("priority", 3)), reverse=True)
         
         # Process all demands
-        for demand in self.config['traffic_demands']:
+        for demand in demands:
             source = demand['source']
             destination = demand['destination']
             flow_gbps = demand['demand_gbps']
@@ -896,6 +1147,10 @@ class TinyLEONorthboundAPI:
         paths_info = {}
         for (source, destination), path in self.paths.items():
             paths_info[f"{source}-{destination}"] = path
+
+        status_info = {
+            f"{s}-{d}": meta for (s, d), meta in getattr(self, "path_status", {}).items()
+        }
         
         # Save to file if requested
         if save:
@@ -904,6 +1159,10 @@ class TinyLEONorthboundAPI:
                 
             with open(os.path.join(output_dir, 'paths.json'), 'w', encoding='utf-8') as f:
                 json.dump(paths_info, f, indent=2)
+
+            if status_info:
+                with open(os.path.join(output_dir, 'path_status.json'), 'w', encoding='utf-8') as f:
+                    json.dump(status_info, f, indent=2)
                 
             print(f"Path information saved to {output_dir} directory")
         

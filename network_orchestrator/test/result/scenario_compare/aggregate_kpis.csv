@@ -1,0 +1,3 @@
+scenario,mean_hops,mean_hops_delta_vs_first,paths_changed_vs_first,path_volume_Gbps,isl_req_total,connected,num_paths
+A_shortest_path,4.933,0.0,0,819486.0,4114.0,True,15
+B_qos_priority,4.933,0.0,7,819486.0,4118.0,True,15
