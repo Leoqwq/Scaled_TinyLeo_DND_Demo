@@ -36,6 +36,12 @@ class WindowConfigTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "grid ID"):
             WindowConfig.from_dict(raw)
 
+    def test_rejects_region_grid_ids_other_than_canada_profile(self):
+        raw = valid_config() | {"region_grid_ids": [0]}
+
+        with self.assertRaisesRegex(ValueError, "region_grid_ids must equal Canada profile"):
+            WindowConfig.from_dict(raw)
+
     def test_uses_canada_profile_defaults(self):
         config = WindowConfig.from_dict(valid_config())
 
@@ -56,6 +62,17 @@ class WindowConfigTests(unittest.TestCase):
             ({"coverage_target": 0}, "coverage_target"),
             ({"num_processes": 7}, "num_processes must be <= 6"),
             ({"target_satellites": 63}, "target_satellites must be >= 64"),
+        ):
+            with self.subTest(overrides=overrides):
+                with self.assertRaisesRegex(ValueError, message):
+                    WindowConfig.from_dict(valid_config() | overrides)
+
+    def test_rejects_non_integer_epoch_bounds(self):
+        for overrides, message in (
+            ({"start_epoch": 8.5}, "start_epoch must be an integer"),
+            ({"start_epoch": True}, "start_epoch must be an integer"),
+            ({"num_epochs": 8.5}, "num_epochs must be an integer"),
+            ({"num_epochs": False}, "num_epochs must be an integer"),
         ):
             with self.subTest(overrides=overrides):
                 with self.assertRaisesRegex(ValueError, message):

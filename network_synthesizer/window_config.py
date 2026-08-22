@@ -1,6 +1,7 @@
 """Immutable configuration for the Canada parity-scale synthesis window."""
 
 from dataclasses import dataclass
+from numbers import Integral
 
 import numpy as np
 
@@ -24,8 +25,8 @@ class WindowConfig:
 
     @classmethod
     def from_dict(cls, raw: dict) -> "WindowConfig":
-        if "start_epoch" not in raw or raw["start_epoch"] < 0:
-            raise ValueError("start_epoch must be non-negative")
+        if "start_epoch" not in raw:
+            raise ValueError("start_epoch is required")
 
         config = cls(
             start_epoch=raw["start_epoch"],
@@ -43,6 +44,12 @@ class WindowConfig:
         return config
 
     def _validate(self) -> None:
+        if isinstance(self.start_epoch, bool) or not isinstance(self.start_epoch, Integral):
+            raise ValueError("start_epoch must be an integer")
+        if self.start_epoch < 0:
+            raise ValueError("start_epoch must be non-negative")
+        if isinstance(self.num_epochs, bool) or not isinstance(self.num_epochs, Integral):
+            raise ValueError("num_epochs must be an integer")
         if self.num_epochs < 8:
             raise ValueError("num_epochs must be >= 8")
         if self.start_epoch + self.num_epochs > legacy_time_split:
@@ -62,6 +69,8 @@ class WindowConfig:
         for grid_id in self.region_grid_ids:
             if not 0 <= grid_id < 121:
                 raise ValueError("grid ID must be between 0 and 120")
+        if self.region_grid_ids != DEFAULT_REGION_GRID_IDS:
+            raise ValueError("region_grid_ids must equal Canada profile grid IDs")
 
     @property
     def epoch_indices(self) -> np.ndarray:
