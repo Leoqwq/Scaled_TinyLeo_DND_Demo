@@ -2,6 +2,7 @@ import csv
 import importlib.util
 import json
 import sys
+import types
 from pathlib import Path
 
 import numpy as np
@@ -78,6 +79,7 @@ def _write_scenario_inputs(root: Path, epochs=12):
     config_path.write_text(
         json.dumps(
             {
+                "num_epochs": epochs,
                 "traffic_matrix_file": traffic_path.name,
                 "block_positions_file": block_path.name,
             }
@@ -120,12 +122,14 @@ class FakeController:
         self.enable_failure_recovery = True
         self.write_measurements = write_measurements
         self.raise_on = raise_on
+        self.raised_exception = None
         self.calls = []
 
     def _call(self, name, *args):
         self.calls.append((name, *args))
         if self.raise_on == name:
-            raise RuntimeError(f"{name} failed")
+            self.raised_exception = RuntimeError(f"{name} failed")
+            raise self.raised_exception
 
     def init_remote_machine(self):
         self._call("init")
@@ -256,6 +260,7 @@ def test_fixed_station_policy_and_workload_inputs_are_exact_and_supported(tmp_pa
         inputs["demand"],
         inputs["traffic"],
         inputs["report"],
+        configured_num_epochs=12,
     )
 
     assert validated["active_grid_ids"] == (12, 13, 14, 23, 24, 25)
@@ -284,6 +289,7 @@ def test_scenario_validation_rejects_nonadjacent_policy_step(tmp_path):
             inputs["demand"],
             inputs["traffic"],
             inputs["report"],
+            configured_num_epochs=12,
         )
 
 
@@ -313,6 +319,7 @@ def test_scenario_validation_rejects_missing_grid_or_workload_support(
             demand,
             traffic,
             inputs["report"],
+            configured_num_epochs=12,
         )
 
 
@@ -321,7 +328,12 @@ def test_path_diversity_rejects_low_reported_or_observed_ratio():
 
     with pytest.raises(ValueError, match="path_epoch_ratio"):
         module.validate_path_diversity(
-            {"path_epoch_ratio": 0.79, "expected_epochs": 1, "epochs": []}
+            {
+                "path_epoch_ratio": 0.79,
+                "expected_epochs": 1,
+                "epochs": [{"epoch": 0, "edge_disjoint_paths": 2}],
+            },
+            required_epochs=1,
         )
 
     with pytest.raises(ValueError, match="edge-disjoint"):
@@ -330,14 +342,201 @@ def test_path_diversity_rejects_low_reported_or_observed_ratio():
                 "path_epoch_ratio": 0.8,
                 "expected_epochs": 5,
                 "epochs": [
-                    {"edge_disjoint_paths": 2},
-                    {"edge_disjoint_paths": 2},
-                    {"edge_disjoint_paths": 2},
-                    {"edge_disjoint_paths": 1},
-                    {"edge_disjoint_paths": 1},
+                    {"epoch": 0, "edge_disjoint_paths": 2},
+                    {"epoch": 1, "edge_disjoint_paths": 2},
+                    {"epoch": 2, "edge_disjoint_paths": 2},
+                    {"epoch": 3, "edge_disjoint_paths": 1},
+                    {"epoch": 4, "edge_disjoint_paths": 1},
                 ],
-            }
+            },
+            required_epochs=5,
         )
+
+
+def test_scenario_gate_rejects_report_epoch_count_different_from_config(tmp_path):
+    module = _load_scenario_module("example_canada_parity_report_count")
+    inputs = _write_scenario_inputs(tmp_path, epochs=12)
+    one_epoch_report = {
+        "valid": True,
+        "expected_epochs": 1,
+        "path_epoch_ratio": 1.0,
+        "epochs": [{"epoch": 0, "edge_disjoint_paths": 2}],
+    }
+
+    with pytest.raises(ValueError, match="expected_epochs.*configured"):
+        module.validate_scenario_inputs(
+            module.GS_LAT_LONG,
+            module.GS_CELL,
+            json.loads(inputs["south_path"].read_text(encoding="utf-8")),
+            json.loads(inputs["north_path"].read_text(encoding="utf-8")),
+            inputs["block_positions"],
+            inputs["demand"],
+            inputs["traffic"],
+            one_epoch_report,
+            configured_num_epochs=12,
+        )
+
+
+def test_scenario_gate_rejects_demand_rows_different_from_config(tmp_path):
+    module = _load_scenario_module("example_canada_parity_demand_count")
+    inputs = _write_scenario_inputs(tmp_path, epochs=12)
+
+    with pytest.raises(ValueError, match="demand rows.*configured"):
+        module.validate_scenario_inputs(
+            module.GS_LAT_LONG,
+            module.GS_CELL,
+            json.loads(inputs["south_path"].read_text(encoding="utf-8")),
+            json.loads(inputs["north_path"].read_text(encoding="utf-8")),
+            inputs["block_positions"],
+            inputs["demand"][:1],
+            inputs["traffic"],
+            inputs["report"],
+            configured_num_epochs=12,
+        )
+
+
+def test_path_diversity_rejects_duplicate_or_missing_epoch_ids():
+    module = _load_scenario_module("example_canada_parity_epoch_ids")
+    report = {
+        "valid": True,
+        "expected_epochs": 12,
+        "path_epoch_ratio": 1.0,
+        "epochs": [
+            {"epoch": epoch if epoch < 11 else 0, "edge_disjoint_paths": 2}
+            for epoch in range(12)
+        ],
+    }
+
+    with pytest.raises(ValueError, match="unique.*0.*11"):
+        module.validate_path_diversity(report, required_epochs=12)
+
+
+def test_runner_rejects_controller_epoch_count_different_from_config(tmp_path):
+    module = _load_scenario_module("example_canada_parity_controller_count")
+    inputs = _write_scenario_inputs(tmp_path / "inputs", epochs=12)
+    controller = FakeController(tmp_path / "controller", num_epochs=1)
+
+    with pytest.raises(ValueError, match="controller num_epochs.*configured"):
+        _run(module, inputs, controller, tmp_path / "result")
+
+    assert controller.calls == [("clean",)]
+
+
+def _install_offline_controller_import_surface(monkeypatch):
+    fake_link_failure_pb2 = types.ModuleType("link_failure_grpc.link_failure_pb2")
+    fake_link_failure_pb2.LinkFailureResponse = object
+    fake_link_failure_pb2_grpc = types.ModuleType(
+        "link_failure_grpc.link_failure_pb2_grpc"
+    )
+    fake_link_failure_pb2_grpc.LinkFailureServiceServicer = object
+    fake_link_failure_pb2_grpc.add_LinkFailureServiceServicer_to_server = (
+        lambda *args, **kwargs: None
+    )
+    monkeypatch.setitem(
+        sys.modules, "link_failure_grpc.link_failure_pb2", fake_link_failure_pb2
+    )
+    monkeypatch.setitem(
+        sys.modules,
+        "link_failure_grpc.link_failure_pb2_grpc",
+        fake_link_failure_pb2_grpc,
+    )
+
+
+def test_main_nondefault_options_are_hidden_only_during_real_factory_construction(
+    tmp_path, monkeypatch
+):
+    module = _load_scenario_module("example_canada_parity_main_factory")
+    inputs = _write_scenario_inputs(tmp_path / "inputs", epochs=1)
+    production_config = json.loads(
+        (PROJECT_ROOT / "test" / "config" / "tinyleo_canada_parity.json").read_text(
+            encoding="utf-8"
+        )
+    )
+    production_config.update(
+        {
+            "Duration (s)": 1,
+            "num_epochs": 1,
+            "traffic_matrix_file": str(inputs["traffic_path"]),
+            "block_positions_file": str(tmp_path / "inputs" / "block_positions.json"),
+            "satellite_file": str(tmp_path / "satellites.npy"),
+            "grid_satellites_file": str(tmp_path / "grids.npy"),
+            "topo_dir": str(tmp_path / "topology"),
+            "Machines": [],
+        }
+    )
+    config_path = tmp_path / "runner-config.json"
+    config_path.write_text(json.dumps(production_config), encoding="utf-8")
+    report_path = tmp_path / "validation-report.json"
+    report_path.write_text(json.dumps(inputs["report"]), encoding="utf-8")
+    _install_offline_controller_import_surface(monkeypatch)
+
+    from southbound.sn_controller import RemoteController
+
+    cleanup_calls = []
+    monkeypatch.setattr(RemoteController, "init_remote_machine", lambda self: None)
+    monkeypatch.setattr(RemoteController, "create_nodes", lambda self: None)
+    monkeypatch.setattr(RemoteController, "create_links", lambda self: None)
+    monkeypatch.setattr(
+        RemoteController, "start_link_faliure_server", lambda self: None
+    )
+    monkeypatch.setattr(
+        RemoteController, "update_tinyleo_topology", lambda self, epoch: None
+    )
+    monkeypatch.setattr(
+        RemoteController, "deploy_tinyleo_srv6_agent", lambda self: None
+    )
+    monkeypatch.setattr(RemoteController, "set_ping", lambda *args: None)
+    monkeypatch.setattr(RemoteController, "set_traceroute", lambda *args: None)
+    monkeypatch.setattr(RemoteController, "set_iperf", lambda *args: None)
+    monkeypatch.setattr(
+        RemoteController, "clean", lambda self: cleanup_calls.append(self)
+    )
+    import psutil
+
+    monkeypatch.setattr(
+        psutil,
+        "Process",
+        lambda: types.SimpleNamespace(
+            memory_info=lambda: types.SimpleNamespace(rss=1234)
+        ),
+    )
+    monkeypatch.setattr(
+        psutil,
+        "virtual_memory",
+        lambda: types.SimpleNamespace(
+            total=10000, available=7000, used=3000, percent=30.0
+        ),
+    )
+    monkeypatch.setattr(
+        psutil,
+        "swap_memory",
+        lambda: types.SimpleNamespace(
+            total=2000, used=100, free=1900, percent=5.0
+        ),
+    )
+
+    runner_argv = [
+        str(SCENARIO_PATH),
+        "--config",
+        str(config_path),
+        "--south-policy",
+        str(inputs["south_path"]),
+        "--north-policy",
+        str(inputs["north_path"]),
+        "--backbone-demand",
+        str(inputs["demand_path"]),
+        "--validation-report",
+        str(report_path),
+        "--result-dir",
+        str(tmp_path / "custom-result"),
+        "--measurement-wait-s",
+        "0",
+    ]
+    monkeypatch.setattr(sys, "argv", runner_argv)
+
+    assert module.main() == 0
+    assert sys.argv == runner_argv
+    assert len(cleanup_calls) == 1
 
 
 def test_import_is_noninteractive_and_has_no_runtime_side_effects(tmp_path, monkeypatch):
@@ -527,19 +726,31 @@ def test_cleanup_and_failure_event_survive_failure_injection_exception(tmp_path)
 
 def test_cleanup_survives_network_command_exception(tmp_path):
     module = _load_scenario_module("example_canada_parity_network_error")
-    inputs = _write_scenario_inputs(tmp_path / "inputs", epochs=1)
+    inputs = _write_scenario_inputs(tmp_path / "inputs", epochs=12)
     controller = FakeController(
-        tmp_path / "controller", num_epochs=1, raise_on="ping"
+        tmp_path / "controller", num_epochs=12, raise_on="ping"
     )
     result_dir = tmp_path / "result"
 
-    with pytest.raises(RuntimeError, match="ping failed"):
+    with pytest.raises(RuntimeError, match="ping failed") as raised:
         _run(module, inputs, controller, result_dir)
 
+    assert raised.value is controller.raised_exception
     assert controller.calls[-1] == ("clean",)
-    assert "STATUS: ERROR" in (result_dir / "ping-epoch-0.txt").read_text(
-        encoding="utf-8"
-    )
+    for epoch in (0, 5, 6, 7, 11):
+        for kind in ("ping", "traceroute"):
+            artifact = result_dir / f"{kind}-epoch-{epoch}.txt"
+            assert artifact.is_file()
+            assert (
+                "STATUS: ERROR" in artifact.read_text(encoding="utf-8")
+                or "STATUS: MISSING" in artifact.read_text(encoding="utf-8")
+            )
+    with (result_dir / "iperf-normal-and-recovery.csv").open(
+        newline="", encoding="utf-8"
+    ) as stream:
+        iperf_rows = list(csv.DictReader(stream))
+    assert [int(row["epoch"]) for row in iperf_rows] == [0, 5, 6, 7, 11]
+    assert {row["status"] for row in iperf_rows} <= {"error", "missing"}
     assert (result_dir / "failure-recovery-events.json").is_file()
     assert (result_dir / "resource-usage.csv").is_file()
     assert (result_dir / "topology-update-times.csv").is_file()

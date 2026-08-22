@@ -13,6 +13,7 @@ import csv
 import json
 import math
 import shutil
+import sys
 import time
 from pathlib import Path
 from typing import Any, Callable
@@ -95,7 +96,11 @@ def _field(value: Any, name: str, default: Any = None) -> Any:
     return getattr(value, name, default)
 
 
-def validate_path_diversity(report: Any, minimum_ratio: float = 0.8) -> dict:
+def validate_path_diversity(
+    report: Any,
+    minimum_ratio: float = 0.8,
+    required_epochs: int | None = None,
+) -> dict:
     """Validate reported and independently observed edge-disjoint path coverage."""
     if not 0 <= minimum_ratio <= 1:
         raise ValueError("minimum_ratio must be between 0 and 1")
@@ -123,31 +128,59 @@ def validate_path_diversity(report: Any, minimum_ratio: float = 0.8) -> dict:
         or expected_epochs <= 0
     ):
         raise ValueError("report.expected_epochs must be a positive integer")
-    if len(epochs) > expected_epochs:
-        raise ValueError("report contains more epochs than expected_epochs")
+    if required_epochs is not None:
+        if (
+            isinstance(required_epochs, bool)
+            or not isinstance(required_epochs, int)
+            or required_epochs <= 0
+        ):
+            raise ValueError("required_epochs must be a positive integer")
+        if expected_epochs != required_epochs:
+            raise ValueError(
+                "report.expected_epochs must equal configured num_epochs "
+                f"({required_epochs})"
+            )
+    else:
+        required_epochs = expected_epochs
+    if len(epochs) != required_epochs:
+        raise ValueError(
+            f"report must contain exactly {required_epochs} epoch metrics"
+        )
 
     passing_epochs = 0
+    epoch_ids = []
     for epoch in epochs:
+        epoch_id = _field(epoch, "epoch")
+        if isinstance(epoch_id, bool) or not isinstance(epoch_id, int):
+            raise ValueError("each epoch metric must have an integer epoch ID")
+        epoch_ids.append(epoch_id)
         path_count = _field(epoch, "edge_disjoint_paths")
         if isinstance(path_count, bool) or not isinstance(path_count, int):
             raise ValueError("each epoch must report integer edge_disjoint_paths")
         if path_count >= 2:
             passing_epochs += 1
-    observed_ratio = passing_epochs / expected_epochs
+    expected_ids = list(range(required_epochs))
+    if sorted(epoch_ids) != expected_ids:
+        raise ValueError(
+            "epoch metrics must have unique IDs exactly "
+            f"0..{required_epochs - 1}"
+        )
+    observed_ratio = passing_epochs / required_epochs
     if observed_ratio < minimum_ratio:
         raise ValueError(
             "edge-disjoint Vancouver-Toronto paths passed in "
             f"{observed_ratio:.1%} of epochs; required {minimum_ratio:.1%}"
         )
-    if reported_ratio > observed_ratio + 1e-12:
+    if not math.isclose(reported_ratio, observed_ratio, rel_tol=0, abs_tol=1e-12):
         raise ValueError(
-            "report.path_epoch_ratio overstates the per-epoch edge-disjoint metrics"
+            "report.path_epoch_ratio must equal the ratio computed from the exact "
+            "per-epoch edge-disjoint metrics"
         )
     return {
         "reported_ratio": reported_ratio,
         "observed_ratio": observed_ratio,
         "passing_epochs": passing_epochs,
-        "expected_epochs": expected_epochs,
+        "expected_epochs": required_epochs,
     }
 
 
@@ -192,6 +225,7 @@ def validate_scenario_inputs(
     traffic_matrix: Any,
     report: Any,
     minimum_ratio: float = 0.8,
+    configured_num_epochs: int | None = None,
 ) -> dict:
     """Pure validation gate for the fixed Canada routing scenario inputs."""
     if gs_lat_long != GS_LAT_LONG:
@@ -218,9 +252,20 @@ def validate_scenario_inputs(
             f"grid mapping resolved {active_grid_ids}, expected {ACTIVE_GRID_IDS}"
         )
 
+    if (
+        isinstance(configured_num_epochs, bool)
+        or not isinstance(configured_num_epochs, int)
+        or configured_num_epochs <= 0
+    ):
+        raise ValueError("configured num_epochs must be a positive integer")
+
     demand = np.asarray(backbone_demand)
     if demand.ndim != 2 or demand.shape[0] == 0 or demand.shape[1] <= max(ACTIVE_GRID_IDS):
         raise ValueError("backbone demand must be a nonempty epoch-by-grid matrix")
+    if demand.shape[0] != configured_num_epochs:
+        raise ValueError(
+            f"demand rows must equal configured num_epochs ({configured_num_epochs})"
+        )
     if not np.isfinite(demand[:, ACTIVE_GRID_IDS]).all() or not np.all(
         demand[:, ACTIVE_GRID_IDS] > 0
     ):
@@ -249,7 +294,11 @@ def validate_scenario_inputs(
                 f"traffic support must be nonzero in both directions for edge {left}-{right}"
             )
 
-    diversity = validate_path_diversity(report, minimum_ratio=minimum_ratio)
+    diversity = validate_path_diversity(
+        report,
+        minimum_ratio=minimum_ratio,
+        required_epochs=configured_num_epochs,
+    )
     return {
         "active_grid_ids": active_grid_ids,
         "traffic_edges": tuple(traffic_edges),
@@ -272,10 +321,22 @@ def _configured_path(config_path: Path, config: dict, key: str) -> Path:
     return path.resolve()
 
 
+def _configured_num_epochs(config: dict) -> int:
+    value = config.get("num_epochs", config.get("Duration (s)"))
+    if isinstance(value, bool) or not isinstance(value, int) or value <= 0:
+        raise ValueError("configuration num_epochs must be a positive integer")
+    return value
+
+
 def _default_controller_factory(configuration_file_path, coordinates, cells):
     from southbound.sn_controller import RemoteController
 
-    return RemoteController(str(configuration_file_path), coordinates, cells)
+    runner_argv = sys.argv
+    try:
+        sys.argv = runner_argv[:1]
+        return RemoteController(str(configuration_file_path), coordinates, cells)
+    finally:
+        sys.argv = runner_argv
 
 
 def _default_resource_sample(_epoch: int) -> dict:
@@ -347,18 +408,64 @@ def _measurement_error(target: Path, source: Path, exc: Exception) -> None:
     )
 
 
+def _write_missing_measurement(target: Path, source: Path, reason: str) -> None:
+    target.write_text(
+        "STATUS: MISSING\n"
+        f"source: {source}\n"
+        f"{reason}\n",
+        encoding="utf-8",
+    )
+
+
 def _finalize_measurement(source: Path, target: Path) -> tuple[str, int]:
     if source.is_file():
         if source != target:
             shutil.copyfile(source, target)
         return "captured", source.stat().st_size
-    target.write_text(
-        "STATUS: MISSING\n"
-        f"source: {source}\n"
-        "No underlying controller command output was produced.\n",
-        encoding="utf-8",
+    _write_missing_measurement(
+        target,
+        source,
+        "No underlying controller command output was produced.",
     )
     return "missing", 0
+
+
+def _measurement_metadata(status: str, source: Path, target: Path, size: int) -> dict:
+    return {
+        "status": status,
+        "source_path": str(source),
+        "artifact_path": str(target),
+        "size_bytes": size,
+    }
+
+
+def _initialize_scheduled_measurements(
+    controller: Any, result_dir: Path, scheduled_epochs: list[int]
+) -> list[dict]:
+    iperf_rows = []
+    for epoch in scheduled_epochs:
+        paths = {}
+        for kind in ("ping", "traceroute", "iperf"):
+            source, target = _measurement_paths(controller, result_dir, kind, epoch)
+            if source.exists():
+                source.unlink()
+            _write_missing_measurement(
+                target,
+                source,
+                "Measurement was scheduled but not attempted before the run ended.",
+            )
+            paths[kind] = (source, target)
+        source, target = paths["iperf"]
+        iperf_rows.append(
+            {
+                "epoch": epoch,
+                "phase": _phase(epoch),
+                "source": SOURCE_GS,
+                "destination": DESTINATION_GS,
+                **_measurement_metadata("missing", source, target, 0),
+            }
+        )
+    return iperf_rows
 
 
 def _collect_measurements(
@@ -367,7 +474,7 @@ def _collect_measurements(
     result_dir: Path,
     sleep: Callable[[float], None],
     measurement_wait_s: float,
-) -> dict[str, dict]:
+) -> tuple[dict[str, dict], Exception | None]:
     prepared = {
         kind: _prepare_measurement(controller, result_dir, kind, epoch)
         for kind in ("ping", "traceroute", "iperf")
@@ -377,26 +484,28 @@ def _collect_measurements(
         "traceroute": controller.set_traceroute,
         "iperf": controller.set_iperf,
     }
+    results = {}
+    command_error = None
     for kind, method in methods.items():
         source, target = prepared[kind]
         try:
             method(SOURCE_GS, DESTINATION_GS, f"epoch-{epoch}")
         except Exception as exc:
             _measurement_error(target, source, exc)
-            raise
-    if measurement_wait_s:
+            results[kind] = _measurement_metadata(
+                "error", source, target, target.stat().st_size
+            )
+            command_error = exc
+            break
+    if command_error is None and measurement_wait_s:
         sleep(measurement_wait_s)
 
-    results = {}
     for kind, (source, target) in prepared.items():
+        if kind in results:
+            continue
         status, size = _finalize_measurement(source, target)
-        results[kind] = {
-            "status": status,
-            "source_path": str(source),
-            "artifact_path": str(target),
-            "size_bytes": size,
-        }
-    return results
+        results[kind] = _measurement_metadata(status, source, target, size)
+    return results, command_error
 
 
 def run_canada_parity(
@@ -429,6 +538,7 @@ def run_canada_parity(
         else validation_report
     )
     config = _load_json(configuration_file_path)
+    configured_num_epochs = _configured_num_epochs(config)
     south_policy = _load_json(south_policy_path)
     north_policy = _load_json(north_policy_path)
     block_positions = _load_json(
@@ -449,6 +559,7 @@ def run_canada_parity(
         traffic_matrix,
         report,
         minimum_ratio=minimum_path_ratio,
+        configured_num_epochs=configured_num_epochs,
     )
 
     result_dir.mkdir(parents=True, exist_ok=True)
@@ -467,8 +578,18 @@ def run_canada_parity(
         controller = controller_factory(
             configuration_file_path, GS_LAT_LONG, GS_CELL
         )
-        if controller.num_epochs <= 0:
-            raise ValueError("Canada parity requires at least one local epoch")
+        if controller.num_epochs != configured_num_epochs:
+            raise ValueError(
+                "controller num_epochs must equal configured num_epochs "
+                f"({configured_num_epochs})"
+            )
+        scheduled_epochs = [
+            epoch for epoch in OBSERVATION_EPOCHS if epoch < configured_num_epochs
+        ]
+        iperf_rows = _initialize_scheduled_measurements(
+            controller, result_dir, scheduled_epochs
+        )
+        iperf_rows_by_epoch = {row["epoch"]: row for row in iperf_rows}
         controller.init_remote_machine()
         controller.create_nodes()
         controller.create_links()
@@ -519,22 +640,16 @@ def run_canada_parity(
                 events.append(failure_event)
 
             if epoch in OBSERVATION_EPOCHS:
-                measurements = _collect_measurements(
+                measurements, command_error = _collect_measurements(
                     controller,
                     epoch,
                     result_dir,
                     sleep,
                     measurement_wait_s,
                 )
-                iperf_rows.append(
-                    {
-                        "epoch": epoch,
-                        "phase": _phase(epoch),
-                        "source": SOURCE_GS,
-                        "destination": DESTINATION_GS,
-                        **measurements["iperf"],
-                    }
-                )
+                iperf_rows_by_epoch[epoch].update(measurements["iperf"])
+                if command_error is not None:
+                    raise command_error
                 if epoch == RECOVERY_OBSERVATION_EPOCH:
                     events.append(
                         {
