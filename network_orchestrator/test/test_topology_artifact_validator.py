@@ -36,18 +36,24 @@ def _position(satellite_id, epoch):
     ]
 
 
-def _physical_edges(inter_edges=INTER_EDGES):
+def _physical_edges(inter_edges=INTER_EDGES, intra_edges=INTRA_EDGES):
     return {
         tuple(sorted(edge))
         for edge, _ in inter_edges
     } | {
         tuple(sorted(edge))
-        for edges in INTRA_EDGES.values()
+        for edges in intra_edges.values()
         for edge in edges
     }
 
 
-def write_valid_bundle(root: Path, epochs=2, inter_edges_by_epoch=None):
+def write_valid_bundle(
+    root: Path,
+    epochs=2,
+    inter_edges_by_epoch=None,
+    satellite_count=8,
+    intra_edges=INTRA_EDGES,
+):
     satellite_file = root / "satellite_data.npy"
     grid_file = root / "grid_satellites.npy"
     traffic_file = root / "traffic_matrix.npy"
@@ -55,7 +61,7 @@ def write_valid_bundle(root: Path, epochs=2, inter_edges_by_epoch=None):
     topology_dir = root / "topology"
 
     satellite_rows = []
-    for satellite_id in range(8):
+    for satellite_id in range(satellite_count):
         positions = [_position(satellite_id, epoch) for epoch in range(epochs)]
         satellite_rows.append(
             [[573.0, 1.2, 0.3], [satellite_id], None, positions, 1]
@@ -104,7 +110,7 @@ def write_valid_bundle(root: Path, epochs=2, inter_edges_by_epoch=None):
         )
         np.save(
             topology_dir / "intra_topology" / f"{epoch}.npy",
-            INTRA_EDGES,
+            intra_edges,
         )
 
         sat_cells = {}
@@ -137,11 +143,13 @@ def write_valid_bundle(root: Path, epochs=2, inter_edges_by_epoch=None):
                     "longitude": float(np.degrees(_position(sat, epoch)[0])),
                     "altitude": 573.0,
                 }
-                for sat in range(8)
+                for sat in range(satellite_count)
             ],
             "links": [
                 {"sat1": left, "sat2": right}
-                for left, right in sorted(_physical_edges(epoch_inter_edges))
+                for left, right in sorted(
+                    _physical_edges(epoch_inter_edges, intra_edges)
+                )
             ],
         }
         (topology_dir / "all_isl_positions" / f"{epoch}.json").write_text(
@@ -171,6 +179,51 @@ def write_valid_bundle(root: Path, epochs=2, inter_edges_by_epoch=None):
 
 
 class TopologyArtifactValidatorTests(unittest.TestCase):
+    def test_component_gate_uses_only_satellites_participating_in_links(self):
+        with tempfile.TemporaryDirectory() as tempdir:
+            config = write_valid_bundle(Path(tempdir), satellite_count=99)
+
+            report = validate_artifact_bundle(config)
+
+            self.assertTrue(report.valid, report.errors)
+            for epoch in report.epochs:
+                self.assertEqual(epoch.participating_satellite_count, 8)
+                self.assertEqual(epoch.largest_component_ratio, 1.0)
+                self.assertAlmostEqual(
+                    epoch.constellation_largest_component_ratio,
+                    8 / 99,
+                )
+
+    def test_component_gate_still_rejects_disconnected_participating_topology(self):
+        disconnected_inter = [
+            ((0, 2), (23, 24)),
+            ((4, 6), (24, 25)),
+        ]
+        disconnected_intra = {
+            23: [(0, 1)],
+            24: [(2, 3)],
+            25: [(6, 7)],
+        }
+        with tempfile.TemporaryDirectory() as tempdir:
+            config = replace(
+                write_valid_bundle(
+                    Path(tempdir),
+                    inter_edges_by_epoch=[disconnected_inter, disconnected_inter],
+                    intra_edges=disconnected_intra,
+                ),
+                min_edge_disjoint_paths=0,
+            )
+
+            report = validate_artifact_bundle(config)
+
+            self.assertFalse(report.valid)
+            self.assertTrue(
+                any(
+                    error.code == "insufficient_connected_component"
+                    for error in report.errors
+                )
+            )
+
     def test_valid_bundle_passes_schema_consistency_and_path_checks(self):
         with tempfile.TemporaryDirectory() as tempdir:
             config = write_valid_bundle(Path(tempdir))
@@ -469,6 +522,18 @@ class TopologyArtifactValidatorTests(unittest.TestCase):
                 rows = list(csv.DictReader(metrics_file))
             self.assertEqual([row["epoch"] for row in rows], ["0", "1"])
             self.assertEqual([row["average_degree"] for row in rows], ["2.0", "2.0"])
+            self.assertEqual(
+                [row["participating_satellite_count"] for row in rows],
+                ["8", "8"],
+            )
+            self.assertEqual(
+                [row["largest_component_ratio"] for row in rows],
+                ["1.0", "1.0"],
+            )
+            self.assertEqual(
+                [row["constellation_largest_component_ratio"] for row in rows],
+                ["1.0", "1.0"],
+            )
             self.assertTrue((output_dir / "topology_churn.csv").is_file())
             summary = (output_dir / "validation_summary.txt").read_text(
                 encoding="utf-8"

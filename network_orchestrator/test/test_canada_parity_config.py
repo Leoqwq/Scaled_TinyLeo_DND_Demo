@@ -72,6 +72,19 @@ def _load_config(path):
         return sn_utils.sn_load_file(str(path))
 
 
+class CanadaParityRunbookTests(unittest.TestCase):
+    def test_synthesis_summary_converts_numpy_epoch_ids_to_builtin_ints(self):
+        runbook = (REPOSITORY_ROOT / "docs" / "canada-parity-runbook.md").read_text(
+            encoding="utf-8"
+        )
+
+        self.assertIn(
+            '"window": [int(value) for value in config.epoch_indices]',
+            runbook,
+        )
+        self.assertNotIn('"window": list(config.epoch_indices)', runbook)
+
+
 def _write_epoch_artifacts(root, epochs=4):
     root = Path(root)
     satellite_file = root / "satellites.npy"

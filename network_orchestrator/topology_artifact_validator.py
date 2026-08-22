@@ -53,7 +53,9 @@ class EpochMetrics:
     inter_link_count: int
     intra_link_count: int
     component_count: int
+    participating_satellite_count: int
     largest_component_ratio: float
+    constellation_largest_component_ratio: float
     edge_disjoint_paths: int
     active_grid_counts: dict[int, int]
     average_degree: float
@@ -760,8 +762,23 @@ def validate_artifact_bundle(config: ValidationConfig) -> ValidationReport:
         average_degree, min_degree, max_degree = _degree_metrics(
             satellite_count, all_edges
         )
+        participating_nodes = {node for edge in all_edges for node in edge}
+        largest_participating_component = max(
+            (
+                len(component & participating_nodes)
+                for component in components
+                if component & participating_nodes
+            ),
+            default=0,
+        )
         largest_component_ratio = (
-            max((len(component) for component in components), default=0) / satellite_count
+            largest_participating_component / len(participating_nodes)
+            if participating_nodes
+            else 0.0
+        )
+        constellation_largest_component_ratio = (
+            max((len(component) for component in components), default=0)
+            / satellite_count
             if satellite_count
             else 0.0
         )
@@ -769,7 +786,8 @@ def validate_artifact_bundle(config: ValidationConfig) -> ValidationReport:
             _error(
                 errors,
                 "insufficient_connected_component",
-                f"Epoch {epoch}: largest component ratio {largest_component_ratio:.3f} "
+                f"Epoch {epoch}: participating-satellite largest component ratio "
+                f"{largest_component_ratio:.3f} "
                 f"is below {config.min_largest_component_ratio:.3f}",
                 epoch,
             )
@@ -800,7 +818,11 @@ def validate_artifact_bundle(config: ValidationConfig) -> ValidationReport:
                 inter_link_count=len(inter_edges),
                 intra_link_count=len(intra_edges),
                 component_count=len(components),
+                participating_satellite_count=len(participating_nodes),
                 largest_component_ratio=largest_component_ratio,
+                constellation_largest_component_ratio=(
+                    constellation_largest_component_ratio
+                ),
                 edge_disjoint_paths=disjoint_paths,
                 active_grid_counts=active_counts,
                 average_degree=average_degree,

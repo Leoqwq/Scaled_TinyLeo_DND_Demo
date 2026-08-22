@@ -147,7 +147,7 @@ summary = {
     "candidate_count": len(candidates),
     "coverage_ratio": result.coverage_ratio,
     "stop_reason": result.stop_reason,
-    "window": list(config.epoch_indices),
+    "window": [int(value) for value in config.epoch_indices],
 }
 (root / "synthesis_summary.json").write_text(
     json.dumps(summary, indent=2, sort_keys=True) + "\n", encoding="utf-8"
@@ -230,7 +230,10 @@ done
 
 Do not continue with a scale unless `validation_summary.txt` says `PASS`, all
 six grids are nonempty in all epochs, and the reported satellite count equals
-the requested scale.
+the requested scale. `largest_component_ratio` is measured over satellites
+participating in that epoch's MPC links; `constellation_largest_component_ratio`
+separately reports the fraction of all fixed containers in the largest
+component without treating intentionally idle satellites as a routing failure.
 
 ## 3. Three-epoch 64/80/96 resource preflight
 
