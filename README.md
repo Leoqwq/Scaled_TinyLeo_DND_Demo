@@ -21,6 +21,10 @@ TinyLEO toolkit/
 └── README.md              # This file
 ```
 
+For the finite 12-epoch, 64–96-satellite Canada feasibility workflow and its
+fail-closed acceptance checks, see the
+[Canada parity-scale emulation runbook](docs/canada-parity-runbook.md).
+
 <!--## Overview
 
 Our TinyLEO toolkit consists of two core components:
