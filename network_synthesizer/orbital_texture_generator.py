@@ -20,6 +20,12 @@ u= 3.986e14 # Standard gravitational parameter (μ = G*M)
 K=RE/pow(u,1/3)*pow(2*np.pi,2/3) 
 eps=25*np.pi/180 #Minimum elevation angle for UE visibility,25° elevation angle converted to radians
 
+
+def phase_indices(initial_slot=0, count=0, modulo=1):
+    """Return linearly advancing orbital slots with modulo wrap."""
+    return [(initial_slot + offset) % modulo for offset in range(count)]
+
+
 class TextureGenerator():
     '''
     This class generates and manages satellite coverage texture library for offline network planning.
@@ -357,11 +363,11 @@ class TextureGenerator():
         selected_cover = lil_matrix((1, n_length), dtype=np.float64)
         # print(np.shape(selected_cover))
         sat_location=[]
-        for t in range(int(self.time_split)):
-            num=(num+t)%int(self.time_split) # The location of the satellite at time t
-            sat_location=[cover[num][1],cover[num][2]]
-            for idx,users in cover[num][0]: # cover
-                selected_cover[0,t*cell_number+idx]+=users 
+        slots = phase_indices(num, int(self.time_split), int(self.time_split))
+        for t, slot_index in enumerate(slots):
+            sat_location.append([cover[slot_index][1],cover[slot_index][2]])
+            for idx,users in cover[slot_index][0]: # cover
+                selected_cover[0,t*cell_number+idx]+=users
         selected_cover = selected_cover.tocsr()
         return [selected_cover,sat_location]
     
