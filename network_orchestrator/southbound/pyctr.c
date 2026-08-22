@@ -10,6 +10,7 @@
 #include <syscall.h>
 #include <fcntl.h>
 #include <sys/mount.h>
+#include <sys/stat.h>
 #include <sys/wait.h>
 #include <sys/eventfd.h>
 
@@ -38,6 +39,7 @@ static int container_init(
     const char* hostname,
     const char* base_dir,
     const char* controller_src,
+    const char* venv_src,
     int err_fd
     ) {
     close(STDIN_FILENO);
@@ -86,6 +88,17 @@ static int container_init(
 
     if(mount(controller_src, controller_dst, NULL, MS_BIND|MS_REC, NULL) != 0) {
         return child_err("mount --bind controller failed: ", err_fd);
+    }
+
+    if(venv_src[0] != '\0') {
+        char venv_dst[PATH_MAX+add_len];
+        snprintf(venv_dst, sizeof(venv_dst), "%s/venv", resources_dst);
+        if(mkdir(venv_dst, MODE) != 0) {
+            return child_err("mkdir venv failed: ", err_fd);
+        }
+        if(mount(venv_src, venv_dst, NULL, MS_BIND|MS_REC, NULL) != 0) {
+            return child_err("mount --bind venv failed: ", err_fd);
+        }
     }
 
     // share /dev/shm
@@ -177,6 +190,7 @@ int container_enter(pid_t ctr_pid, char *const* argv, int err_fd) {
 // ret < 0 for parent err, ret == 0 for child err
 static int container_run_inner(
     const char *base_dir, const char *hostname, const char *controller_src,
+    const char *venv_src,
     char *chd_err, size_t max_len) {
     // 0755
     const mode_t MODE = S_IRWXU | (S_IRGRP|S_IXGRP) | (S_IROTH|S_IXOTH);
@@ -224,6 +238,7 @@ static int container_run_inner(
             close(event_fd);
             exit(container_init(
                 new_root, overlay_opt, hostname, base_dir, controller_src,
+                venv_src,
                 err_fds[1]
             ));
             // should not execute here
@@ -295,16 +310,39 @@ static PyObject *container_run(PyObject *self, PyObject *args) {
     const char *base_dir = NULL;
     const char *hostname = NULL;
     const char *controller_src = NULL;
+    const char *venv_src = NULL;
     char chd_err[256];
     int pid;
 
     if (!PyArg_ParseTuple(args,
-        "sss:container_run(base_dir, hostname, controller_source)",
-        &base_dir, &hostname, &controller_src))
+        "ssss:container_run(base_dir, hostname, controller_source, venv_source)",
+        &base_dir, &hostname, &controller_src, &venv_src))
         return NULL;
 
+    struct stat source_stat;
+    if(controller_src[0] != '/'
+    || stat(controller_src, &source_stat) != 0
+    || !S_ISDIR(source_stat.st_mode)) {
+        PyErr_SetString(
+            PyExc_ValueError,
+            "controller_source must be an existing absolute directory"
+        );
+        return NULL;
+    }
+    if(venv_src[0] != '\0'
+    && (venv_src[0] != '/'
+        || stat(venv_src, &source_stat) != 0
+        || !S_ISDIR(source_stat.st_mode))) {
+        PyErr_SetString(
+            PyExc_ValueError,
+            "venv_source must be empty or an existing absolute directory"
+        );
+        return NULL;
+    }
+
     pid = container_run_inner(
-        base_dir, hostname, controller_src, chd_err, sizeof(chd_err) - 1
+        base_dir, hostname, controller_src, venv_src,
+        chd_err, sizeof(chd_err) - 1
     );
     if(pid < 0) {
         PyErr_SetFromErrno(PyExc_OSError);

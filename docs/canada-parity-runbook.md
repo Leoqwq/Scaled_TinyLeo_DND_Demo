@@ -39,7 +39,7 @@ sudo apt-get install -y \
   build-essential curl iperf3 iproute2 iptables iputils-ping \
   libnetfilter-queue-dev libnfnetlink-dev openssh-server \
   python3-dev python3-venv traceroute util-linux
-python3 -m venv "$VENV"
+python3 -m venv --copies "$VENV"
 export PYTHON_BIN="$VENV/bin/python"
 "$PYTHON_BIN" -m pip install --upgrade pip
 "$PYTHON_BIN" -m pip install \
@@ -541,10 +541,18 @@ done
 ```
 
 The absolute host venv interpreter recorded in each config launches remote
-commands and the controller-source `srv6_agent.py`. `nsenter` joins each
-target's UTS, IPC, network, and PID namespaces without changing to its mount
-namespace, so both the configured host interpreter and the verified host
-controller source remain addressable; no legacy experiment path is assumed.
+commands. During node creation, TinyLEO validates and bind-mounts that venv at
+`/resources/venv` and the current experiment controller at
+`/resources/controller` in every emulated root. The deploy helper validates
+both host sources, then `nsenter` joins each target's mount, UTS, IPC, network,
+and PID namespaces, adopts `/proc/PID/root`, and executes only
+`/resources/venv/bin/python` plus the target-root controller agent. Thus
+`/resources`, `/etc/hostname`, and `/etc/hosts` resolve inside the emulated
+overlay root; no host path or legacy experiment path is used after entry.
+`python3 -m venv --copies` makes the interpreter location explicit; a legacy
+system-Python config is accepted only when its probe resolves an absolute
+interpreter already present through the `lowerdir=/` root and agent liveness
+validation succeeds.
 Each deployment must acknowledge exactly the validated satellite count plus
 the six ground-station agents, with unique remote and namespace identities.
 Failure injection deterministically selects the lexicographically first
@@ -562,12 +570,12 @@ continue the comparison.
 Build the comparison only after both complete acceptance summaries pass. This
 script fails if the scenarios did not use the same failure schedule and link,
 replacement, or if packet-level latency, loss, or hop evidence is unparseable.
-Epoch 6 may have zero replies, 100% loss, and therefore no RTT summary; epoch 7
-may likewise have no resolved traceroute hops, represented as JSON `null`.
+Epoch 6 may have zero replies, 100% loss, and therefore no RTT summary; it may
+likewise have no resolved traceroute hops, represented as JSON `null`.
 Epoch 7 must have a positive reply count, parseable RTT, and resolved path.
-Failure/recovery
-interruption comes only from the separately timed interval surrounding remote
-injection, acknowledgement, and recovery—not from an ordinary topology update.
+Failure/recovery interruption comes only from the separately timed interval
+surrounding remote injection, acknowledgement, and recovery—not from an
+ordinary topology update.
 
 ```bash
 PYTHONPATH="$REPO/network_orchestrator" \

@@ -509,7 +509,14 @@ def _add_link_inter_machine(idx, name1, name2, remote_ip, prefix, delay, bw, los
     _init_if(name1, n1_n2, prefix+'.10/24', delay, bw, loss)
     _init_if(name2, n2_n1, prefix+'.40/24', delay, bw, loss)
 
-def sn_init_nodes(dir, sat_mid_dict_shell, gs_mid_dict):
+def sn_init_nodes(
+    dir,
+    sat_mid_dict_shell,
+    gs_mid_dict,
+    *,
+    controller_source=None,
+    venv_source=None,
+):
     """
     Initializes containers for satellites and ground stations.
 
@@ -556,10 +563,21 @@ def sn_init_nodes(dir, sat_mid_dict_shell, gs_mid_dict):
 
 
 
-    controller_source = os.path.join(dir, 'controller')
-    if not os.path.isdir(controller_source):
+    if controller_source is None:
+        controller_source = os.path.join(dir, 'controller')
+    if not os.path.isabs(controller_source) or not os.path.isdir(
+        controller_source
+    ):
         raise FileNotFoundError(
-            f"controller mount source does not exist: {controller_source}"
+            f"controller mount source is not an absolute directory: {controller_source}"
+        )
+    if venv_source is None:
+        venv_source = sys.prefix if sys.prefix != sys.base_prefix else ''
+    if venv_source and (
+        not os.path.isabs(venv_source) or not os.path.isdir(venv_source)
+    ):
+        raise FileNotFoundError(
+            f"venv mount source is not an absolute directory: {venv_source}"
         )
     pid_file = open(dir + '/' + PID_FILENAME, 'w', encoding='utf-8')
     sat_cnt = 0
@@ -573,7 +591,9 @@ def sn_init_nodes(dir, sat_mid_dict_shell, gs_mid_dict):
             os.makedirs(node_dir, exist_ok=True)
             pid_file.write(
                 node + ':' + str(
-                    pyctr.container_run(node_dir, node, controller_source)
+                    pyctr.container_run(
+                        node_dir, node, controller_source, venv_source
+                    )
                 ) + ' '
             )
         pid_file.write('\n')
@@ -590,7 +610,9 @@ def sn_init_nodes(dir, sat_mid_dict_shell, gs_mid_dict):
         os.makedirs(node_dir, exist_ok=True)
         pid_file.write(
             node + ':' + str(
-                pyctr.container_run(node_dir, node, controller_source)
+                pyctr.container_run(
+                    node_dir, node, controller_source, venv_source
+                )
             ) + ' '
         )
     pid_file.write('\n')
@@ -1182,8 +1204,21 @@ if __name__ == '__main__':
     
     sat_mid_dict_shell, gs_mid_dict, ip_lst = _get_params(workdir + '/' + ASSIGN_FILENAME)
     if cmd == 'nodes':
+        if len(sys.argv) not in (4, 6):
+            raise ValueError(
+                "nodes accepts either legacy workdir arguments or explicit "
+                "controller and venv mount sources"
+            )
+        controller_source = sys.argv[4] if len(sys.argv) == 6 else None
+        venv_source = sys.argv[5] if len(sys.argv) == 6 else None
         sn_clean(workdir, sat_mid_dict_shell, gs_mid_dict)
-        sn_init_nodes(workdir, sat_mid_dict_shell, gs_mid_dict)
+        sn_init_nodes(
+            workdir,
+            sat_mid_dict_shell,
+            gs_mid_dict,
+            controller_source=controller_source,
+            venv_source=venv_source,
+        )
     elif cmd == 'list':
         print(f"{'NODE':<20} STATE")
         for name in _pid_map(workdir + '/' + PID_FILENAME):

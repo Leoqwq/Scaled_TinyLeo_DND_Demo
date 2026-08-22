@@ -866,6 +866,20 @@ def test_noop_failure_without_remote_ack_is_rejected(tmp_path):
                 ],
             },
         ],
+        [
+            {
+                "remote_id": 0,
+                "expected_count": 86,
+                "started_count": 86,
+                "agents": [
+                    {
+                        "name": f"node-{index}",
+                        "namespace_pid": 1000 if index == 85 else 1000 + index,
+                    }
+                    for index in range(86)
+                ],
+            }
+        ],
     ],
 )
 def test_srv6_ack_rejects_partial_or_duplicate_remote_results(
@@ -878,6 +892,29 @@ def test_srv6_ack_rejects_partial_or_duplicate_remote_results(
             {"remote_acknowledgements": acknowledgements},
             expected_total=86,
         )
+
+
+def test_srv6_ack_allows_same_pid_on_different_remotes():
+    module = _load_scenario_module("example_canada_parity_per_remote_pids")
+    acknowledgements = []
+    for remote_id, prefix in ((0, "a"), (1, "b")):
+        acknowledgements.append(
+            {
+                "remote_id": remote_id,
+                "expected_count": 43,
+                "started_count": 43,
+                "agents": [
+                    {"name": f"{prefix}-{index}", "namespace_pid": 1000 + index}
+                    for index in range(43)
+                ],
+            }
+        )
+
+    actual = module._validate_srv6_acknowledgement(
+        {"remote_acknowledgements": acknowledgements}, expected_total=86
+    )
+
+    assert actual["remote_acknowledgements"] == acknowledgements
 
 
 def test_routing_modes_apply_exact_fixed_policies_and_write_metadata(tmp_path):

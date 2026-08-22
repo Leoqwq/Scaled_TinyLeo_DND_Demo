@@ -496,7 +496,7 @@ def test_failure_recovery_requires_separately_timed_interruption(tmp_path):
 
 @pytest.mark.parametrize(
     "mutation",
-    ["partial", "duplicate_remote"],
+    ["partial", "duplicate_remote", "duplicate_pid"],
 )
 def test_srv6_gate_rejects_partial_or_duplicate_remote_acknowledgements(
     tmp_path, mutation
@@ -511,7 +511,7 @@ def test_srv6_gate_rejects_partial_or_duplicate_remote_acknowledgements(
         acknowledgements[0]["expected_count"] = 85
         acknowledgements[0]["started_count"] = 85
         acknowledgements[0]["agents"] = acknowledgements[0]["agents"][:85]
-    else:
+    elif mutation == "duplicate_remote":
         first = acknowledgements[0]
         first["expected_count"] = 43
         first["started_count"] = 43
@@ -526,11 +526,43 @@ def test_srv6_gate_rejects_partial_or_duplicate_remote_acknowledgements(
             ],
         }
         acknowledgements.append(duplicate)
+    else:
+        acknowledgements[0]["agents"][-1]["namespace_pid"] = (
+            acknowledgements[0]["agents"][0]["namespace_pid"]
+        )
     _save_json(event_path, payload)
 
     summary = _run(paths)
 
     assert summary["gates"]["srv6_deployment"]["passed"] is False
+
+
+def test_srv6_gate_scopes_namespace_pid_uniqueness_to_each_remote(tmp_path):
+    paths = _valid_bundle(tmp_path)
+    event_path = paths[0] / "failure-recovery-events.json"
+    payload = _load_json(event_path)
+    acknowledgements = payload["events"][0]["acknowledgement"][
+        "remote_acknowledgements"
+    ]
+    acknowledgements[0]["expected_count"] = 43
+    acknowledgements[0]["started_count"] = 43
+    acknowledgements[0]["agents"] = acknowledgements[0]["agents"][:43]
+    acknowledgements.append(
+        {
+            "remote_id": 1,
+            "expected_count": 43,
+            "started_count": 43,
+            "agents": [
+                {"name": f"remote-1-{index}", "namespace_pid": 1000 + index}
+                for index in range(43)
+            ],
+        }
+    )
+    _save_json(event_path, payload)
+
+    summary = _run(paths)
+
+    assert summary["gates"]["srv6_deployment"]["passed"] is True
 
 
 @pytest.mark.parametrize("case", ["wrong_endpoint", "stray_artifact"])

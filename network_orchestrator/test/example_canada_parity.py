@@ -417,6 +417,7 @@ def _validate_srv6_acknowledgement(value: Any, *, expected_total: int) -> dict:
             raise ValueError("SRv6 acknowledgement must identify every agent")
         remote_ids.add(remote_id)
         started_total += started
+        namespace_pids = set()
         for agent in agents:
             if not isinstance(agent, dict):
                 raise ValueError("SRv6 agent identity must be an object")
@@ -429,9 +430,11 @@ def _validate_srv6_acknowledgement(value: Any, *, expected_total: int) -> dict:
                 or isinstance(namespace_pid, bool)
                 or not isinstance(namespace_pid, int)
                 or namespace_pid <= 0
+                or namespace_pid in namespace_pids
             ):
                 raise ValueError("SRv6 agent identity is invalid or duplicated")
             agent_names.add(name)
+            namespace_pids.add(namespace_pid)
     if started_total != expected_total:
         raise ValueError(
             f"SRv6 started {started_total} agents; expected exactly {expected_total}"

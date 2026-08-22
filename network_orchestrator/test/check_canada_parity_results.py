@@ -794,6 +794,7 @@ def check_results(
                     break
                 remote_ids.add(remote_id)
                 started_total += started
+                namespace_pids = set()
                 for agent in agents:
                     if not isinstance(agent, dict):
                         deployment_ok = False
@@ -807,10 +808,12 @@ def check_results(
                         or isinstance(namespace_pid, bool)
                         or not isinstance(namespace_pid, int)
                         or namespace_pid <= 0
+                        or namespace_pid in namespace_pids
                     ):
                         deployment_ok = False
                         break
                     agent_names.add(name)
+                    namespace_pids.add(namespace_pid)
                 if not deployment_ok:
                     break
         expected_agent_total = (

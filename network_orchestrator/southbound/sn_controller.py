@@ -394,12 +394,34 @@ class RemoteController():
             ):
                 raise RuntimeError("SRv6 deployment remote identity is invalid")
             remote_ids.add(remote_id)
+            expected_count = acknowledgement.get('expected_count', 0)
+            agents = acknowledgement.get('agents')
             if (
-                acknowledgement.get('expected_count', 0) <= 0
+                expected_count <= 0
                 or acknowledgement.get('started_count')
-                != acknowledgement.get('expected_count')
+                != expected_count
+                or not isinstance(agents, list)
+                or len(agents) != expected_count
             ):
                 raise RuntimeError("SRv6 deployment did not start every agent")
+            namespace_pids = set()
+            for agent in agents:
+                namespace_pid = (
+                    agent.get('namespace_pid')
+                    if isinstance(agent, dict)
+                    else None
+                )
+                if (
+                    isinstance(namespace_pid, bool)
+                    or not isinstance(namespace_pid, int)
+                    or namespace_pid <= 0
+                ):
+                    raise RuntimeError("SRv6 namespace PID is invalid")
+                if namespace_pid in namespace_pids:
+                    raise RuntimeError(
+                        "SRv6 acknowledgement has duplicate namespace PID"
+                    )
+                namespace_pids.add(namespace_pid)
         if remote_ids != {remote.id for remote in self.remote_lst}:
             raise RuntimeError("SRv6 deployment acknowledgements are incomplete")
         end = time.time()
@@ -730,15 +752,67 @@ class RemoteMachine:
             for value in (self.remote_python, script, *args)
         )
 
+    def _resolve_remote_python_layout(self):
+        marker = 'TINYLEO_PYTHON_LAYOUT='
+        probe = (
+            "import json,sys; print('" + marker + "' + json.dumps({"
+            "'executable':sys.executable,'prefix':sys.prefix,"
+            "'base_prefix':sys.base_prefix},sort_keys=True))"
+        )
+        output = sn_remote_wait_output(
+            self.ssh, self._python_command('-c', probe)
+        )
+        matches = [
+            json.loads(line[len(marker):])
+            for line in output.splitlines()
+            if line.startswith(marker)
+        ]
+        if len(matches) != 1 or not isinstance(matches[0], dict):
+            raise RuntimeError(
+                "configured remote Python returned no unique runtime layout"
+            )
+        layout = matches[0]
+        executable = layout.get('executable')
+        prefix = layout.get('prefix')
+        base_prefix = layout.get('base_prefix')
+        if not all(
+            isinstance(value, str) and value
+            for value in (executable, prefix, base_prefix)
+        ) or not os.path.isabs(executable):
+            raise RuntimeError("configured remote Python layout is invalid")
+        self.remote_python_source = executable
+        if prefix != base_prefix:
+            prefix_with_separator = prefix.rstrip('/') + '/'
+            if not os.path.isabs(prefix) or not executable.startswith(
+                prefix_with_separator
+            ):
+                raise RuntimeError(
+                    "configured venv executable is outside its runtime prefix"
+                )
+            relative_executable = executable[len(prefix_with_separator):]
+            if not relative_executable or '..' in relative_executable.split('/'):
+                raise RuntimeError("configured venv executable path is unsafe")
+            self.venv_source = prefix
+            self.container_python = '/resources/venv/' + relative_executable
+        else:
+            # Legacy system-Python configurations are safe only when the probe
+            # resolves an absolute executable already present in lowerdir=/.
+            self.venv_source = ''
+            self.container_python = executable
+        self.controller_source = os.path.join(self.dir, 'controller')
+
     
     def init_nodes(self):
         """
         Initializes nodes (e.g., satellites and ground stations) on the remote machine.
         """
+        if not hasattr(self, 'container_python'):
+            self._resolve_remote_python_layout()
         sn_remote_wait_output(
             self.ssh,
             self._python_command(
-                f"{self.dir}/sn_remote.py", "nodes", self.id, self.dir
+                f"{self.dir}/sn_remote.py", "nodes", self.id, self.dir,
+                self.controller_source, self.venv_source,
             )
         )
         self.sftp.get(
@@ -875,12 +949,21 @@ class RemoteMachine:
         """
         Deploy the SRv6 agent on the remote machine for data plane operations.
         """
+        if not hasattr(self, 'container_python'):
+            self._resolve_remote_python_layout()
+        agent_source = (
+            f"{self.controller_source}/geographic_srv6_anycast/srv6_agent.py"
+        )
         output = sn_remote_wait_output(
             self.ssh,
             self._python_command(
                 f"{self.dir}/controller/geographic_srv6_anycast/deploy_srv6_agent.py",
                 "--workdir", self.dir,
-                "--python-executable", self.remote_python,
+                "--python-executable", self.container_python,
+                "--python-source", self.remote_python_source,
+                "--agent-source", agent_source,
+                "--agent-target",
+                "/resources/controller/geographic_srv6_anycast/srv6_agent.py",
                 "--remote-id", self.id,
             )
         )

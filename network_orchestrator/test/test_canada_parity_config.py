@@ -856,13 +856,19 @@ class RuntimeAcknowledgementTests(unittest.TestCase):
 
         class Pyctr:
             @staticmethod
-            def container_run(base_dir, hostname, controller_source):
-                calls.append((base_dir, hostname, controller_source))
+            def container_run(
+                base_dir, hostname, controller_source, venv_source
+            ):
+                calls.append(
+                    (base_dir, hostname, controller_source, venv_source)
+                )
                 return 101 + len(calls)
 
         with tempfile.TemporaryDirectory(prefix="tinyleo workdir ") as tempdir:
             controller_source = Path(tempdir) / "controller"
             controller_source.mkdir()
+            venv_source = Path(tempdir) / "venv with spaces"
+            venv_source.mkdir()
             with (
                 mock.patch.object(sn_remote, "pyctr", Pyctr, create=True),
                 mock.patch.object(sn_remote, "machine_id", 0, create=True),
@@ -873,16 +879,79 @@ class RuntimeAcknowledgementTests(unittest.TestCase):
                     tempdir,
                     [{"SH1SAT1": 0}],
                     {"GS1": 0},
+                    controller_source=str(controller_source),
+                    venv_source=str(venv_source),
                 )
 
         self.assertEqual(len(calls), 2)
         self.assertTrue(
             all(call[2] == str(controller_source) for call in calls)
         )
+        self.assertTrue(all(call[3] == str(venv_source) for call in calls))
         pyctr_source = (
             PROJECT_ROOT / "southbound" / "pyctr.c"
         ).read_text(encoding="utf-8")
         self.assertNotIn("/root/tinyleo-Arbitrary-LeastDelay", pyctr_source)
+        self.assertIn('"ssss:container_run', pyctr_source)
+        self.assertIn('"%s/venv", resources_dst', pyctr_source)
+        self.assertIn("mount(venv_src, venv_dst", pyctr_source)
+
+    def test_remote_python_layout_resolves_configured_venv_for_target_root(self):
+        machine = RemoteMachine.__new__(RemoteMachine)
+        machine.ssh = object()
+        machine.dir = "/root/experiment"
+        machine.remote_python = "/tmp/venv with spaces/bin/python"
+        response = {
+            "executable": "/tmp/venv with spaces/bin/python",
+            "prefix": "/tmp/venv with spaces",
+            "base_prefix": "/usr",
+        }
+
+        with mock.patch(
+            "southbound.sn_controller.sn_remote_wait_output",
+            return_value="TINYLEO_PYTHON_LAYOUT=" + json.dumps(response),
+        ) as run:
+            machine._resolve_remote_python_layout()
+
+        command = run.call_args.args[1]
+        self.assertIn("'/tmp/venv with spaces/bin/python'", command)
+        self.assertIn("'import json", command)
+        self.assertEqual(machine.venv_source, "/tmp/venv with spaces")
+        self.assertEqual(
+            machine.container_python, "/resources/venv/bin/python"
+        )
+        self.assertEqual(
+            machine.remote_python_source,
+            "/tmp/venv with spaces/bin/python",
+        )
+
+    def test_remote_python_layout_allows_only_resolved_absolute_system_fallback(self):
+        machine = RemoteMachine.__new__(RemoteMachine)
+        machine.ssh = object()
+        machine.dir = "/root/experiment"
+        machine.remote_python = "python3"
+        valid = {
+            "executable": "/usr/bin/python3",
+            "prefix": "/usr",
+            "base_prefix": "/usr",
+        }
+
+        with mock.patch(
+            "southbound.sn_controller.sn_remote_wait_output",
+            return_value="TINYLEO_PYTHON_LAYOUT=" + json.dumps(valid),
+        ):
+            machine._resolve_remote_python_layout()
+
+        self.assertEqual(machine.venv_source, "")
+        self.assertEqual(machine.container_python, "/usr/bin/python3")
+
+        invalid = {**valid, "executable": "python3"}
+        with mock.patch(
+            "southbound.sn_controller.sn_remote_wait_output",
+            return_value="TINYLEO_PYTHON_LAYOUT=" + json.dumps(invalid),
+        ):
+            with self.assertRaisesRegex(RuntimeError, "layout is invalid"):
+                machine._resolve_remote_python_layout()
 
     def test_pyctr_compile_uses_running_interpreter_without_shell_escaping(self):
         with (
@@ -1002,6 +1071,10 @@ class RuntimeAcknowledgementTests(unittest.TestCase):
         machine.dir = "/root/experiment with spaces"
         machine.remote_python = "/tmp/venv with spaces/bin/python"
         machine.failure_controller_endpoint = "127.0.0.1:50051"
+        machine.controller_source = "/root/experiment with spaces/controller"
+        machine.venv_source = "/tmp/venv with spaces"
+        machine.container_python = "/resources/venv/bin/python"
+        machine.remote_python_source = "/tmp/venv with spaces/bin/python"
         machine.ssh = object()
         machine.local_dir = "/tmp/local"
 
@@ -1022,6 +1095,17 @@ class RuntimeAcknowledgementTests(unittest.TestCase):
                         "remote_id": 0,
                     }
                 )
+            if "deploy_srv6_agent.py" in command:
+                return "TINYLEO_SRV6_DEPLOY_ACK=" + json.dumps(
+                    {
+                        "remote_id": 0,
+                        "expected_count": 1,
+                        "started_count": 1,
+                        "agents": [
+                            {"name": "SH1SAT1", "namespace_pid": 101}
+                        ],
+                    }
+                )
             return ""
 
         with mock.patch(
@@ -1031,11 +1115,28 @@ class RuntimeAcknowledgementTests(unittest.TestCase):
             acknowledgement = machine.fault_test(
                 6, 200, 0, 96, 0, ("SH1SAT1", "SH1SAT2")
             )
+            deploy_acknowledgement = machine.deploy_tinyleo_srv6_agent()
 
         self.assertIn("'/tmp/venv with spaces/bin/python'", commands[0])
         self.assertIn("'/root/experiment with spaces/sn_remote.py'", commands[0])
+        self.assertIn(
+            "'/root/experiment with spaces/controller'", commands[0]
+        )
+        self.assertIn("'/tmp/venv with spaces'", commands[0])
         self.assertIn("127.0.0.1:50051", commands[1])
         self.assertEqual(acknowledgement["remote_id"], 0)
+        deploy_command = commands[2]
+        self.assertIn("--agent-source", deploy_command)
+        self.assertIn(
+            "'/root/experiment with spaces/controller/geographic_srv6_anycast/srv6_agent.py'",
+            deploy_command,
+        )
+        self.assertIn("--agent-target /resources/controller/geographic_srv6_anycast/srv6_agent.py", deploy_command)
+        self.assertIn("--python-executable /resources/venv/bin/python", deploy_command)
+        self.assertIn(
+            "--python-source '/tmp/venv with spaces/bin/python'", deploy_command
+        )
+        self.assertEqual(deploy_acknowledgement["remote_id"], 0)
 
     def test_remote_machine_rejects_fault_ack_without_remote_identity(self):
         machine = RemoteMachine.__new__(RemoteMachine)
@@ -1130,6 +1231,27 @@ class RuntimeAcknowledgementTests(unittest.TestCase):
         with self.assertRaisesRegex(RuntimeError, "remote fault failed"):
             controller.tinyleo_fault_test()
         with self.assertRaisesRegex(RuntimeError, "agent exited"):
+            controller.deploy_tinyleo_srv6_agent()
+
+    def test_controller_rejects_duplicate_namespace_pid_in_remote_ack(self):
+        class Remote:
+            id = 0
+
+            def deploy_tinyleo_srv6_agent(self):
+                return {
+                    "remote_id": 0,
+                    "expected_count": 2,
+                    "started_count": 2,
+                    "agents": [
+                        {"name": "SH1SAT1", "namespace_pid": 101},
+                        {"name": "GS1", "namespace_pid": 101},
+                    ],
+                }
+
+        controller = RemoteController.__new__(RemoteController)
+        controller.remote_lst = [Remote()]
+
+        with self.assertRaisesRegex(RuntimeError, "duplicate namespace PID"):
             controller.deploy_tinyleo_srv6_agent()
 
     def test_link_create_and_topology_update_worker_failures_propagate(self):
@@ -1229,8 +1351,13 @@ class RuntimeAcknowledgementTests(unittest.TestCase):
 
             ack = module.deploy_agents(
                 root,
-                "/tmp/runtime/bin/python",
+                "/resources/venv/bin/python",
                 remote_id=3,
+                agent_source=agent_path,
+                agent_target=(
+                    "/resources/controller/geographic_srv6_anycast/srv6_agent.py"
+                ),
+                python_source=Path("/bin/sh"),
                 process_factory=Process,
                 sleeper=lambda _seconds: None,
             )
@@ -1238,16 +1365,45 @@ class RuntimeAcknowledgementTests(unittest.TestCase):
         self.assertEqual(ack["expected_count"], 2)
         self.assertEqual(ack["started_count"], 2)
         self.assertEqual(ack["remote_id"], 3)
-        self.assertTrue(all("/tmp/runtime/bin/python" in command for command in commands))
         self.assertTrue(
             all(
-                str(agent_path)
-                in command
+                command
+                == [
+                    "nsenter",
+                    "--mount",
+                    "--uts",
+                    "--ipc",
+                    "--net",
+                    "--pid",
+                    "--target",
+                    command[7],
+                    f"--root=/proc/{command[7]}/root",
+                    "/resources/venv/bin/python",
+                    "/resources/controller/geographic_srv6_anycast/srv6_agent.py",
+                ]
                 for command in commands
             )
         )
-        self.assertTrue(all("-m" not in command for command in commands))
         self.assertTrue(all("/root/tinyleo-Arbitrary-LeastDelay" not in " ".join(command) for command in commands))
+
+        with tempfile.TemporaryDirectory() as tempdir:
+            root = Path(tempdir)
+            (root / "container_pid.txt").write_text(
+                "SH1SAT1:101 GS1:101\n", encoding="utf-8"
+            )
+            agent_path = root / "srv6_agent.py"
+            agent_path.write_text("# agent\n", encoding="utf-8")
+            with self.assertRaisesRegex(ValueError, "duplicate namespace PID"):
+                module.deploy_agents(
+                    root,
+                    "/resources/venv/bin/python",
+                    remote_id=0,
+                    agent_source=agent_path,
+                    agent_target="/resources/controller/srv6_agent.py",
+                    python_source=Path("/bin/sh"),
+                    process_factory=Process,
+                    sleeper=lambda _seconds: None,
+                )
 
         class ExitedProcess:
             def __init__(self, command, **kwargs):
@@ -1272,6 +1428,7 @@ class RuntimeAcknowledgementTests(unittest.TestCase):
                     root,
                     "/tmp/runtime/bin/python",
                     remote_id=0,
+                    python_source=Path("/bin/sh"),
                     process_factory=ExitedProcess,
                     sleeper=lambda _seconds: None,
                 )
@@ -1279,7 +1436,7 @@ class RuntimeAcknowledgementTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tempdir:
             root = Path(tempdir)
             (root / "container_pid.txt").write_text("SH1SAT1:101\n", encoding="utf-8")
-            with self.assertRaisesRegex(FileNotFoundError, "agent script"):
+            with self.assertRaisesRegex(FileNotFoundError, "agent source"):
                 module.deploy_agents(
                     root,
                     "/tmp/runtime/bin/python",
