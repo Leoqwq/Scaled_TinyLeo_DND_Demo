@@ -1,0 +1,560 @@
+import csv
+import importlib.util
+import json
+import sys
+from pathlib import Path
+
+import numpy as np
+import pytest
+
+
+PROJECT_ROOT = Path(__file__).resolve().parents[1]
+REPOSITORY_ROOT = PROJECT_ROOT.parent
+SCENARIO_PATH = Path(__file__).with_name("example_canada_parity.py")
+SOUTH_POLICY_PATH = Path(__file__).parent / "config" / (
+    "geographic_routing_policy_canada_south.json"
+)
+NORTH_POLICY_PATH = Path(__file__).parent / "config" / (
+    "geographic_routing_policy_canada_north.json"
+)
+
+
+def _load_scenario_module(module_name="example_canada_parity_for_test"):
+    assert SCENARIO_PATH.is_file(), "Canada parity scenario runner is missing"
+    spec = importlib.util.spec_from_file_location(module_name, SCENARIO_PATH)
+    module = importlib.util.module_from_spec(spec)
+    sys.modules[module_name] = module
+    spec.loader.exec_module(module)
+    return module
+
+
+def _write_scenario_inputs(root: Path, epochs=12):
+    root.mkdir(parents=True, exist_ok=True)
+    block_positions = {
+        str(grid_id): {"row_col": row_col, "lat_lon": [0, 0]}
+        for grid_id, row_col in {
+            12: [2, 2],
+            13: [2, 3],
+            14: [2, 4],
+            23: [3, 2],
+            24: [3, 3],
+            25: [3, 4],
+        }.items()
+    }
+    block_path = root / "block_positions.json"
+    block_path.write_text(json.dumps(block_positions), encoding="utf-8")
+
+    demand = np.zeros((epochs, 121), dtype=np.float64)
+    demand[:, [12, 14, 23, 25]] = 6.0
+    demand[:, [13, 24]] = 8.0
+    demand_path = root / "canada_parity_backbone_demand.npy"
+    np.save(demand_path, demand)
+
+    traffic = np.zeros((121, 121), dtype=np.float64)
+    for left, right in (
+        (12, 13),
+        (13, 14),
+        (23, 24),
+        (24, 25),
+        (12, 23),
+        (13, 24),
+        (14, 25),
+    ):
+        traffic[left, right] = traffic[right, left] = 1.0
+    traffic_path = root / "canada_parity_traffic_matrix.npy"
+    np.save(traffic_path, traffic)
+
+    south_path = root / "south.json"
+    south_path.write_text(
+        json.dumps({"[3, 2]->[3, 4]": [[3, 3]]}), encoding="utf-8"
+    )
+    north_path = root / "north.json"
+    north_path.write_text(
+        json.dumps({"[3, 2]->[3, 4]": [[2, 2], [2, 3], [2, 4]]}),
+        encoding="utf-8",
+    )
+
+    config_path = root / "tinyleo_canada_parity.json"
+    config_path.write_text(
+        json.dumps(
+            {
+                "traffic_matrix_file": traffic_path.name,
+                "block_positions_file": block_path.name,
+            }
+        ),
+        encoding="utf-8",
+    )
+    report = {
+        "valid": True,
+        "expected_epochs": epochs,
+        "path_epoch_ratio": 1.0,
+        "epochs": [
+            {"epoch": epoch, "edge_disjoint_paths": 2}
+            for epoch in range(epochs)
+        ],
+    }
+    return {
+        "block_positions": block_positions,
+        "demand": demand,
+        "demand_path": demand_path,
+        "traffic": traffic,
+        "traffic_path": traffic_path,
+        "south_path": south_path,
+        "north_path": north_path,
+        "config_path": config_path,
+        "report": report,
+    }
+
+
+class FakeController:
+    def __init__(
+        self,
+        local_dir: Path,
+        num_epochs=12,
+        write_measurements=True,
+        raise_on=None,
+    ):
+        self.local_dir = str(local_dir)
+        self.num_epochs = num_epochs
+        self.topology_update_interval_s = 20.0
+        self.enable_failure_recovery = True
+        self.write_measurements = write_measurements
+        self.raise_on = raise_on
+        self.calls = []
+
+    def _call(self, name, *args):
+        self.calls.append((name, *args))
+        if self.raise_on == name:
+            raise RuntimeError(f"{name} failed")
+
+    def init_remote_machine(self):
+        self._call("init")
+
+    def create_nodes(self):
+        self._call("create_nodes")
+
+    def create_links(self):
+        self._call("create_links")
+
+    def start_link_faliure_server(self):
+        self._call("start_failure_server")
+
+    def update_tinyleo_topology(self, epoch):
+        self._call("update", epoch)
+
+    def deploy_tinyleo_srv6_agent(self):
+        self._call("deploy")
+
+    def tinyleo_fault_test(self):
+        self._call("failure")
+
+    def _measure(self, kind, source, destination, filename):
+        self._call(kind, source, destination, filename)
+        if self.write_measurements:
+            output = Path(self.local_dir) / "result" / f"{kind}-{filename}.txt"
+            output.parent.mkdir(parents=True, exist_ok=True)
+            output.write_text(
+                f"real fake-boundary {kind} output {source}->{destination}\n",
+                encoding="utf-8",
+            )
+
+    def set_ping(self, source, destination, filename):
+        self._measure("ping", source, destination, filename)
+
+    def set_traceroute(self, source, destination, filename):
+        self._measure("traceroute", source, destination, filename)
+
+    def set_iperf(self, source, destination, filename):
+        self._measure("iperf", source, destination, filename)
+
+    def clean(self):
+        self.calls.append(("clean",))
+
+
+class IncrementingClock:
+    def __init__(self):
+        self.value = 100.0
+
+    def __call__(self):
+        self.value += 0.125
+        return self.value
+
+
+def _resource_sample(_epoch):
+    return {
+        "process_rss_bytes": 1234,
+        "system_memory_total_bytes": 10000,
+        "system_memory_available_bytes": 7000,
+        "system_memory_used_bytes": 3000,
+        "system_memory_percent": 30.0,
+        "swap_total_bytes": 2000,
+        "swap_used_bytes": 100,
+        "swap_free_bytes": 1900,
+        "swap_percent": 5.0,
+    }
+
+
+def _run(module, inputs, controller, result_dir, **overrides):
+    factory_calls = []
+
+    def controller_factory(config_path, coordinates, cells):
+        factory_calls.append((Path(config_path), coordinates, cells))
+        return controller
+
+    kwargs = {
+        "configuration_file_path": inputs["config_path"],
+        "south_policy_path": inputs["south_path"],
+        "north_policy_path": inputs["north_path"],
+        "backbone_demand_path": inputs["demand_path"],
+        "validation_report": inputs["report"],
+        "result_dir": result_dir,
+        "controller_factory": controller_factory,
+        "sleep": lambda _seconds: None,
+        "monotonic": IncrementingClock(),
+        "resource_sampler": _resource_sample,
+        "measurement_wait_s": 0,
+    }
+    kwargs.update(overrides)
+    module.run_canada_parity(**kwargs)
+    return factory_calls
+
+
+def test_fixed_station_policy_and_workload_inputs_are_exact_and_supported(tmp_path):
+    module = _load_scenario_module()
+    inputs = _write_scenario_inputs(tmp_path)
+
+    assert module.GS_NAMES == (
+        "GS1",
+        "GS2",
+        "GS3",
+        "GS4",
+        "GS5",
+        "GS6",
+    )
+    assert module.GS_LAT_LONG == [
+        [60.7212, -135.0568],
+        [62.4540, -114.3718],
+        [63.7467, -68.5170],
+        [49.2827, -123.1207],
+        [51.0447, -114.0719],
+        [43.6532, -79.3832],
+    ]
+    assert module.GS_CELL == [[2, 2], [2, 3], [2, 4], [3, 2], [3, 3], [3, 4]]
+    assert json.loads(SOUTH_POLICY_PATH.read_text(encoding="utf-8")) == {
+        "[3, 2]->[3, 4]": [[3, 3]]
+    }
+    assert json.loads(NORTH_POLICY_PATH.read_text(encoding="utf-8")) == {
+        "[3, 2]->[3, 4]": [[2, 2], [2, 3], [2, 4]]
+    }
+
+    validated = module.validate_scenario_inputs(
+        module.GS_LAT_LONG,
+        module.GS_CELL,
+        json.loads(inputs["south_path"].read_text(encoding="utf-8")),
+        json.loads(inputs["north_path"].read_text(encoding="utf-8")),
+        inputs["block_positions"],
+        inputs["demand"],
+        inputs["traffic"],
+        inputs["report"],
+    )
+
+    assert validated["active_grid_ids"] == (12, 13, 14, 23, 24, 25)
+    assert validated["traffic_edges"] == (
+        (23, 24),
+        (24, 25),
+        (12, 23),
+        (12, 13),
+        (13, 14),
+        (14, 25),
+    )
+
+
+def test_scenario_validation_rejects_nonadjacent_policy_step(tmp_path):
+    module = _load_scenario_module("example_canada_parity_bad_route")
+    inputs = _write_scenario_inputs(tmp_path)
+    bad_north = {"[3, 2]->[3, 4]": [[2, 2], [2, 4]]}
+
+    with pytest.raises(ValueError, match="adjacent"):
+        module.validate_scenario_inputs(
+            module.GS_LAT_LONG,
+            module.GS_CELL,
+            json.loads(inputs["south_path"].read_text(encoding="utf-8")),
+            bad_north,
+            inputs["block_positions"],
+            inputs["demand"],
+            inputs["traffic"],
+            inputs["report"],
+        )
+
+
+@pytest.mark.parametrize("missing_support", ["demand", "traffic", "grid_mapping"])
+def test_scenario_validation_rejects_missing_grid_or_workload_support(
+    tmp_path, missing_support
+):
+    module = _load_scenario_module(f"example_canada_parity_{missing_support}")
+    inputs = _write_scenario_inputs(tmp_path)
+    blocks = json.loads(json.dumps(inputs["block_positions"]))
+    demand = inputs["demand"].copy()
+    traffic = inputs["traffic"].copy()
+    if missing_support == "demand":
+        demand[:, 13] = 0
+    elif missing_support == "traffic":
+        traffic[12, 13] = traffic[13, 12] = 0
+    else:
+        blocks["13"]["row_col"] = [9, 9]
+
+    with pytest.raises(ValueError, match=missing_support.replace("_", " ")):
+        module.validate_scenario_inputs(
+            module.GS_LAT_LONG,
+            module.GS_CELL,
+            json.loads(inputs["south_path"].read_text(encoding="utf-8")),
+            json.loads(inputs["north_path"].read_text(encoding="utf-8")),
+            blocks,
+            demand,
+            traffic,
+            inputs["report"],
+        )
+
+
+def test_path_diversity_rejects_low_reported_or_observed_ratio():
+    module = _load_scenario_module("example_canada_parity_diversity")
+
+    with pytest.raises(ValueError, match="path_epoch_ratio"):
+        module.validate_path_diversity(
+            {"path_epoch_ratio": 0.79, "expected_epochs": 1, "epochs": []}
+        )
+
+    with pytest.raises(ValueError, match="edge-disjoint"):
+        module.validate_path_diversity(
+            {
+                "path_epoch_ratio": 0.8,
+                "expected_epochs": 5,
+                "epochs": [
+                    {"edge_disjoint_paths": 2},
+                    {"edge_disjoint_paths": 2},
+                    {"edge_disjoint_paths": 2},
+                    {"edge_disjoint_paths": 1},
+                    {"edge_disjoint_paths": 1},
+                ],
+            }
+        )
+
+
+def test_import_is_noninteractive_and_has_no_runtime_side_effects(tmp_path, monkeypatch):
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.setattr(
+        "builtins.input",
+        lambda *_args, **_kwargs: (_ for _ in ()).throw(
+            AssertionError("interactive input is forbidden")
+        ),
+    )
+    before = set(tmp_path.iterdir())
+
+    module = _load_scenario_module("example_canada_parity_import_safe")
+
+    assert callable(module.run_canada_parity)
+    assert callable(module.main)
+    assert set(tmp_path.iterdir()) == before
+
+
+def test_runner_uses_real_controller_sequence_and_vancouver_to_toronto_calls(tmp_path):
+    module = _load_scenario_module("example_canada_parity_sequence")
+    inputs = _write_scenario_inputs(tmp_path / "inputs", epochs=8)
+    controller = FakeController(tmp_path / "controller", num_epochs=8)
+
+    factory_calls = _run(module, inputs, controller, tmp_path / "result")
+
+    assert factory_calls == [
+        (inputs["config_path"], module.GS_LAT_LONG, module.GS_CELL)
+    ]
+    lifecycle = [
+        call
+        for call in controller.calls
+        if call[0]
+        in {
+            "init",
+            "create_nodes",
+            "create_links",
+            "start_failure_server",
+            "update",
+            "deploy",
+            "failure",
+            "clean",
+        }
+    ]
+    assert lifecycle == [
+        ("init",),
+        ("create_nodes",),
+        ("create_links",),
+        ("start_failure_server",),
+        ("update", 0),
+        ("deploy",),
+        ("update", 1),
+        ("update", 2),
+        ("update", 3),
+        ("update", 4),
+        ("update", 5),
+        ("update", 6),
+        ("failure",),
+        ("update", 7),
+        ("clean",),
+    ]
+    measurements = [
+        call for call in controller.calls if call[0] in {"ping", "traceroute", "iperf"}
+    ]
+    assert {call[1:3] for call in measurements} == {("GS4", "GS6")}
+    assert [call for call in controller.calls if call[0] == "failure"] == [
+        ("failure",)
+    ]
+
+
+def test_runner_writes_observations_and_metadata_schemas(tmp_path):
+    module = _load_scenario_module("example_canada_parity_artifacts")
+    inputs = _write_scenario_inputs(tmp_path / "inputs")
+    controller = FakeController(tmp_path / "controller")
+    result_dir = tmp_path / "result"
+
+    _run(module, inputs, controller, result_dir)
+
+    observation_epochs = (0, 5, 6, 7, 11)
+    assert {
+        path.name for path in result_dir.glob("ping-epoch-*.txt")
+    } == {f"ping-epoch-{epoch}.txt" for epoch in observation_epochs}
+    assert {
+        path.name for path in result_dir.glob("traceroute-epoch-*.txt")
+    } == {f"traceroute-epoch-{epoch}.txt" for epoch in observation_epochs}
+
+    with (result_dir / "iperf-normal-and-recovery.csv").open(
+        newline="", encoding="utf-8"
+    ) as stream:
+        iperf_rows = list(csv.DictReader(stream))
+        assert tuple(iperf_rows[0]) == (
+            "epoch",
+            "phase",
+            "source",
+            "destination",
+            "status",
+            "source_path",
+            "artifact_path",
+            "size_bytes",
+        )
+    assert [int(row["epoch"]) for row in iperf_rows] == list(observation_epochs)
+    assert {row["status"] for row in iperf_rows} == {"captured"}
+
+    events = json.loads(
+        (result_dir / "failure-recovery-events.json").read_text(encoding="utf-8")
+    )
+    assert events["failure_epoch"] == 6
+    assert events["recovery_observation_epoch"] == 7
+    assert events["events"][0]["status"] == "returned"
+    assert events["events"][1]["event"] == "recovery_observation"
+    assert events["events"][1]["status"] == "measurement_attempted"
+
+    with (result_dir / "resource-usage.csv").open(
+        newline="", encoding="utf-8"
+    ) as stream:
+        resource_rows = list(csv.DictReader(stream))
+    assert len(resource_rows) == 12
+    assert tuple(resource_rows[0]) == (
+        "epoch",
+        "process_rss_bytes",
+        "system_memory_total_bytes",
+        "system_memory_available_bytes",
+        "system_memory_used_bytes",
+        "system_memory_percent",
+        "swap_total_bytes",
+        "swap_used_bytes",
+        "swap_free_bytes",
+        "swap_percent",
+        "scope",
+    )
+    assert all("not n2 VM acceptance" in row["scope"] for row in resource_rows)
+
+    with (result_dir / "topology-update-times.csv").open(
+        newline="", encoding="utf-8"
+    ) as stream:
+        update_rows = list(csv.DictReader(stream))
+    assert tuple(update_rows[0]) == ("epoch", "duration_seconds", "status")
+    assert [int(row["epoch"]) for row in update_rows] == list(range(12))
+    assert {row["status"] for row in update_rows} == {"returned"}
+
+
+def test_runner_marks_missing_measurements_without_fabricating_success(tmp_path):
+    module = _load_scenario_module("example_canada_parity_missing")
+    inputs = _write_scenario_inputs(tmp_path / "inputs", epochs=1)
+    controller = FakeController(
+        tmp_path / "controller", num_epochs=1, write_measurements=False
+    )
+    result_dir = tmp_path / "result"
+
+    _run(module, inputs, controller, result_dir)
+
+    ping = (result_dir / "ping-epoch-0.txt").read_text(encoding="utf-8")
+    traceroute = (result_dir / "traceroute-epoch-0.txt").read_text(
+        encoding="utf-8"
+    )
+    assert "STATUS: MISSING" in ping
+    assert "STATUS: MISSING" in traceroute
+    assert "PASS" not in ping + traceroute
+    with (result_dir / "iperf-normal-and-recovery.csv").open(
+        newline="", encoding="utf-8"
+    ) as stream:
+        rows = list(csv.DictReader(stream))
+    assert rows[0]["status"] == "missing"
+    assert "PASS" not in json.dumps(rows)
+
+
+def test_cleanup_and_failure_event_survive_failure_injection_exception(tmp_path):
+    module = _load_scenario_module("example_canada_parity_failure_error")
+    inputs = _write_scenario_inputs(tmp_path / "inputs", epochs=7)
+    controller = FakeController(
+        tmp_path / "controller", num_epochs=7, raise_on="failure"
+    )
+    result_dir = tmp_path / "result"
+
+    with pytest.raises(RuntimeError, match="failure failed"):
+        _run(module, inputs, controller, result_dir)
+
+    assert controller.calls[-1] == ("clean",)
+    assert len([call for call in controller.calls if call[0] == "failure"]) == 1
+    events = json.loads(
+        (result_dir / "failure-recovery-events.json").read_text(encoding="utf-8")
+    )
+    assert events["events"][-1]["event"] == "failure_injection"
+    assert events["events"][-1]["status"] == "raised"
+    assert "failure failed" in events["events"][-1]["error"]
+
+
+def test_cleanup_survives_network_command_exception(tmp_path):
+    module = _load_scenario_module("example_canada_parity_network_error")
+    inputs = _write_scenario_inputs(tmp_path / "inputs", epochs=1)
+    controller = FakeController(
+        tmp_path / "controller", num_epochs=1, raise_on="ping"
+    )
+    result_dir = tmp_path / "result"
+
+    with pytest.raises(RuntimeError, match="ping failed"):
+        _run(module, inputs, controller, result_dir)
+
+    assert controller.calls[-1] == ("clean",)
+    assert "STATUS: ERROR" in (result_dir / "ping-epoch-0.txt").read_text(
+        encoding="utf-8"
+    )
+    assert (result_dir / "failure-recovery-events.json").is_file()
+    assert (result_dir / "resource-usage.csv").is_file()
+    assert (result_dir / "topology-update-times.csv").is_file()
+
+
+def test_short_run_emits_only_in_range_observation_epochs(tmp_path):
+    module = _load_scenario_module("example_canada_parity_short")
+    inputs = _write_scenario_inputs(tmp_path / "inputs", epochs=6)
+    controller = FakeController(tmp_path / "controller", num_epochs=6)
+    result_dir = tmp_path / "result"
+
+    _run(module, inputs, controller, result_dir)
+
+    assert {path.name for path in result_dir.glob("ping-epoch-*.txt")} == {
+        "ping-epoch-0.txt",
+        "ping-epoch-5.txt",
+    }
+    assert not [call for call in controller.calls if call[0] == "failure"]

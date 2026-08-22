@@ -1,0 +1,612 @@
+"""Noninteractive Canada parity-scale emulation scenario.
+
+Heavy controller operations stay behind ``controller_factory`` so the input,
+schedule, cleanup, and artifact contracts can be verified without root or
+network access.  The default factory lazily imports and constructs the real
+``RemoteController``.
+"""
+
+from __future__ import annotations
+
+import argparse
+import csv
+import json
+import math
+import shutil
+import time
+from pathlib import Path
+from typing import Any, Callable
+
+import numpy as np
+
+
+PROJECT_ROOT = Path(__file__).resolve().parents[1]
+REPOSITORY_ROOT = PROJECT_ROOT.parent
+CONFIG_DIR = Path(__file__).resolve().parent / "config"
+
+GS_NAMES = ("GS1", "GS2", "GS3", "GS4", "GS5", "GS6")
+GS_LAT_LONG = [
+    [60.7212, -135.0568],
+    [62.4540, -114.3718],
+    [63.7467, -68.5170],
+    [49.2827, -123.1207],
+    [51.0447, -114.0719],
+    [43.6532, -79.3832],
+]
+GS_CELL = [[2, 2], [2, 3], [2, 4], [3, 2], [3, 3], [3, 4]]
+
+ROUTE_KEY = "[3, 2]->[3, 4]"
+SOUTH_POLICY = {ROUTE_KEY: [[3, 3]]}
+NORTH_POLICY = {ROUTE_KEY: [[2, 2], [2, 3], [2, 4]]}
+ACTIVE_GRID_IDS = (12, 13, 14, 23, 24, 25)
+OBSERVATION_EPOCHS = (0, 5, 6, 7, 11)
+FAILURE_EPOCH = 6
+RECOVERY_OBSERVATION_EPOCH = 7
+SOURCE_GS = "GS4"
+DESTINATION_GS = "GS6"
+
+DEFAULT_CONFIGURATION = CONFIG_DIR / "tinyleo_canada_parity.json"
+DEFAULT_SOUTH_POLICY = CONFIG_DIR / "geographic_routing_policy_canada_south.json"
+DEFAULT_NORTH_POLICY = CONFIG_DIR / "geographic_routing_policy_canada_north.json"
+DEFAULT_BACKBONE_DEMAND = (
+    REPOSITORY_ROOT
+    / "network_synthesizer"
+    / "test"
+    / "data"
+    / "canada_parity_backbone_demand.npy"
+)
+DEFAULT_VALIDATION_REPORT = (
+    PROJECT_ROOT / "result" / "canada_parity_validation" / "validation_report.json"
+)
+DEFAULT_RESULT_DIR = PROJECT_ROOT / "result" / "canada_parity"
+
+IPERF_FIELDS = (
+    "epoch",
+    "phase",
+    "source",
+    "destination",
+    "status",
+    "source_path",
+    "artifact_path",
+    "size_bytes",
+)
+RESOURCE_FIELDS = (
+    "epoch",
+    "process_rss_bytes",
+    "system_memory_total_bytes",
+    "system_memory_available_bytes",
+    "system_memory_used_bytes",
+    "system_memory_percent",
+    "swap_total_bytes",
+    "swap_used_bytes",
+    "swap_free_bytes",
+    "swap_percent",
+    "scope",
+)
+TOPOLOGY_FIELDS = ("epoch", "duration_seconds", "status")
+RESOURCE_SCOPE = (
+    "controller process RSS plus host memory/swap counters; not n2 VM acceptance"
+)
+
+
+def _field(value: Any, name: str, default: Any = None) -> Any:
+    if isinstance(value, dict):
+        return value.get(name, default)
+    return getattr(value, name, default)
+
+
+def validate_path_diversity(report: Any, minimum_ratio: float = 0.8) -> dict:
+    """Validate reported and independently observed edge-disjoint path coverage."""
+    if not 0 <= minimum_ratio <= 1:
+        raise ValueError("minimum_ratio must be between 0 and 1")
+    if _field(report, "valid", True) is False:
+        raise ValueError("offline topology validation report is not valid")
+
+    reported_ratio = _field(report, "path_epoch_ratio")
+    if (
+        isinstance(reported_ratio, bool)
+        or not isinstance(reported_ratio, (int, float))
+        or not math.isfinite(float(reported_ratio))
+    ):
+        raise ValueError("report.path_epoch_ratio must be a finite number")
+    reported_ratio = float(reported_ratio)
+    if reported_ratio < minimum_ratio:
+        raise ValueError(
+            f"report.path_epoch_ratio {reported_ratio:.3f} is below {minimum_ratio:.3f}"
+        )
+
+    epochs = list(_field(report, "epochs", ()))
+    expected_epochs = _field(report, "expected_epochs", len(epochs))
+    if (
+        isinstance(expected_epochs, bool)
+        or not isinstance(expected_epochs, int)
+        or expected_epochs <= 0
+    ):
+        raise ValueError("report.expected_epochs must be a positive integer")
+    if len(epochs) > expected_epochs:
+        raise ValueError("report contains more epochs than expected_epochs")
+
+    passing_epochs = 0
+    for epoch in epochs:
+        path_count = _field(epoch, "edge_disjoint_paths")
+        if isinstance(path_count, bool) or not isinstance(path_count, int):
+            raise ValueError("each epoch must report integer edge_disjoint_paths")
+        if path_count >= 2:
+            passing_epochs += 1
+    observed_ratio = passing_epochs / expected_epochs
+    if observed_ratio < minimum_ratio:
+        raise ValueError(
+            "edge-disjoint Vancouver-Toronto paths passed in "
+            f"{observed_ratio:.1%} of epochs; required {minimum_ratio:.1%}"
+        )
+    if reported_ratio > observed_ratio + 1e-12:
+        raise ValueError(
+            "report.path_epoch_ratio overstates the per-epoch edge-disjoint metrics"
+        )
+    return {
+        "reported_ratio": reported_ratio,
+        "observed_ratio": observed_ratio,
+        "passing_epochs": passing_epochs,
+        "expected_epochs": expected_epochs,
+    }
+
+
+def _route_cells(policy: dict, label: str) -> list[list[int]]:
+    if not isinstance(policy, dict) or set(policy) != {ROUTE_KEY}:
+        raise ValueError(f"{label} policy must contain only endpoint {ROUTE_KEY}")
+    waypoints = policy[ROUTE_KEY]
+    if not isinstance(waypoints, list):
+        raise ValueError(f"{label} policy waypoints must be a list")
+    route = [[3, 2], *waypoints, [3, 4]]
+    for cell in route:
+        if (
+            not isinstance(cell, list)
+            or len(cell) != 2
+            or any(isinstance(item, bool) or not isinstance(item, int) for item in cell)
+        ):
+            raise ValueError(f"{label} policy cells must be integer [row, column] pairs")
+    for left, right in zip(route, route[1:]):
+        if abs(left[0] - right[0]) + abs(left[1] - right[1]) != 1:
+            raise ValueError(f"{label} policy route steps must be adjacent")
+    return route
+
+
+def _grid_id_for_cell(block_positions: dict, cell: list[int]) -> int:
+    matches = [
+        int(grid_id)
+        for grid_id, metadata in block_positions.items()
+        if metadata.get("row_col") == cell
+    ]
+    if len(matches) != 1:
+        raise ValueError(f"grid mapping must map cell {cell} exactly once")
+    return matches[0]
+
+
+def validate_scenario_inputs(
+    gs_lat_long: Any,
+    gs_cell: Any,
+    south_policy: Any,
+    north_policy: Any,
+    block_positions: Any,
+    backbone_demand: Any,
+    traffic_matrix: Any,
+    report: Any,
+    minimum_ratio: float = 0.8,
+) -> dict:
+    """Pure validation gate for the fixed Canada routing scenario inputs."""
+    if gs_lat_long != GS_LAT_LONG:
+        raise ValueError("ground-station coordinates or order are not the fixed scenario")
+    if gs_cell != GS_CELL:
+        raise ValueError("ground-station cells or order are not the fixed scenario")
+
+    south_route = _route_cells(south_policy, "south")
+    north_route = _route_cells(north_policy, "north")
+    if south_policy != SOUTH_POLICY:
+        raise ValueError("south policy does not match the fixed scenario")
+    if north_policy != NORTH_POLICY:
+        raise ValueError("north policy does not match the fixed scenario")
+    if not isinstance(block_positions, dict):
+        raise ValueError("grid mapping must be a JSON object")
+
+    cell_to_grid = {
+        tuple(cell): _grid_id_for_cell(block_positions, cell)
+        for cell in GS_CELL
+    }
+    active_grid_ids = tuple(cell_to_grid[tuple(cell)] for cell in GS_CELL)
+    if active_grid_ids != ACTIVE_GRID_IDS:
+        raise ValueError(
+            f"grid mapping resolved {active_grid_ids}, expected {ACTIVE_GRID_IDS}"
+        )
+
+    demand = np.asarray(backbone_demand)
+    if demand.ndim != 2 or demand.shape[0] == 0 or demand.shape[1] <= max(ACTIVE_GRID_IDS):
+        raise ValueError("backbone demand must be a nonempty epoch-by-grid matrix")
+    if not np.isfinite(demand[:, ACTIVE_GRID_IDS]).all() or not np.all(
+        demand[:, ACTIVE_GRID_IDS] > 0
+    ):
+        raise ValueError("backbone demand must be nonzero for every active grid and epoch")
+
+    routes = (south_route, north_route)
+    traffic_edges: list[tuple[int, int]] = []
+    for route in routes:
+        route_grid_ids = [cell_to_grid[tuple(cell)] for cell in route]
+        for left, right in zip(route_grid_ids, route_grid_ids[1:]):
+            edge = tuple(sorted((left, right)))
+            if edge not in traffic_edges:
+                traffic_edges.append(edge)
+
+    traffic = np.asarray(traffic_matrix)
+    if (
+        traffic.ndim != 2
+        or traffic.shape[0] != traffic.shape[1]
+        or traffic.shape[0] <= max(ACTIVE_GRID_IDS)
+    ):
+        raise ValueError("traffic matrix must be a square global-grid matrix")
+    for left, right in traffic_edges:
+        values = (traffic[left, right], traffic[right, left])
+        if not all(np.isfinite(value) and value > 0 for value in values):
+            raise ValueError(
+                f"traffic support must be nonzero in both directions for edge {left}-{right}"
+            )
+
+    diversity = validate_path_diversity(report, minimum_ratio=minimum_ratio)
+    return {
+        "active_grid_ids": active_grid_ids,
+        "traffic_edges": tuple(traffic_edges),
+        "path_diversity": diversity,
+    }
+
+
+def _load_json(path: Path) -> Any:
+    with path.open(encoding="utf-8") as stream:
+        return json.load(stream)
+
+
+def _configured_path(config_path: Path, config: dict, key: str) -> Path:
+    raw_path = config.get(key)
+    if not isinstance(raw_path, str) or not raw_path:
+        raise ValueError(f"configuration is missing {key}")
+    path = Path(raw_path).expanduser()
+    if not path.is_absolute():
+        path = config_path.parent / path
+    return path.resolve()
+
+
+def _default_controller_factory(configuration_file_path, coordinates, cells):
+    from southbound.sn_controller import RemoteController
+
+    return RemoteController(str(configuration_file_path), coordinates, cells)
+
+
+def _default_resource_sample(_epoch: int) -> dict:
+    import psutil
+
+    process = psutil.Process()
+    memory = psutil.virtual_memory()
+    swap = psutil.swap_memory()
+    return {
+        "process_rss_bytes": process.memory_info().rss,
+        "system_memory_total_bytes": memory.total,
+        "system_memory_available_bytes": memory.available,
+        "system_memory_used_bytes": memory.used,
+        "system_memory_percent": memory.percent,
+        "swap_total_bytes": swap.total,
+        "swap_used_bytes": swap.used,
+        "swap_free_bytes": swap.free,
+        "swap_percent": swap.percent,
+    }
+
+
+def _write_csv(path: Path, fieldnames: tuple[str, ...], rows: list[dict]) -> None:
+    with path.open("w", newline="", encoding="utf-8") as stream:
+        writer = csv.DictWriter(stream, fieldnames=fieldnames)
+        writer.writeheader()
+        writer.writerows(rows)
+
+
+def _write_events(path: Path, events: list[dict]) -> None:
+    payload = {
+        "failure_epoch": FAILURE_EPOCH,
+        "recovery_observation_epoch": RECOVERY_OBSERVATION_EPOCH,
+        "events": events,
+    }
+    path.write_text(json.dumps(payload, indent=2, sort_keys=True), encoding="utf-8")
+
+
+def _phase(epoch: int) -> str:
+    return {
+        0: "normal",
+        5: "pre_failure",
+        6: "failure_injection",
+        7: "recovery_observation",
+        11: "final",
+    }[epoch]
+
+
+def _measurement_paths(controller: Any, result_dir: Path, kind: str, epoch: int):
+    name = f"{kind}-epoch-{epoch}.txt"
+    source = Path(controller.local_dir) / "result" / name
+    return source, result_dir / name
+
+
+def _prepare_measurement(controller: Any, result_dir: Path, kind: str, epoch: int):
+    source, target = _measurement_paths(controller, result_dir, kind, epoch)
+    if source.exists():
+        source.unlink()
+    if target != source and target.exists():
+        target.unlink()
+    return source, target
+
+
+def _measurement_error(target: Path, source: Path, exc: Exception) -> None:
+    target.write_text(
+        "STATUS: ERROR\n"
+        f"source: {source}\n"
+        f"error: {type(exc).__name__}: {exc}\n",
+        encoding="utf-8",
+    )
+
+
+def _finalize_measurement(source: Path, target: Path) -> tuple[str, int]:
+    if source.is_file():
+        if source != target:
+            shutil.copyfile(source, target)
+        return "captured", source.stat().st_size
+    target.write_text(
+        "STATUS: MISSING\n"
+        f"source: {source}\n"
+        "No underlying controller command output was produced.\n",
+        encoding="utf-8",
+    )
+    return "missing", 0
+
+
+def _collect_measurements(
+    controller: Any,
+    epoch: int,
+    result_dir: Path,
+    sleep: Callable[[float], None],
+    measurement_wait_s: float,
+) -> dict[str, dict]:
+    prepared = {
+        kind: _prepare_measurement(controller, result_dir, kind, epoch)
+        for kind in ("ping", "traceroute", "iperf")
+    }
+    methods = {
+        "ping": controller.set_ping,
+        "traceroute": controller.set_traceroute,
+        "iperf": controller.set_iperf,
+    }
+    for kind, method in methods.items():
+        source, target = prepared[kind]
+        try:
+            method(SOURCE_GS, DESTINATION_GS, f"epoch-{epoch}")
+        except Exception as exc:
+            _measurement_error(target, source, exc)
+            raise
+    if measurement_wait_s:
+        sleep(measurement_wait_s)
+
+    results = {}
+    for kind, (source, target) in prepared.items():
+        status, size = _finalize_measurement(source, target)
+        results[kind] = {
+            "status": status,
+            "source_path": str(source),
+            "artifact_path": str(target),
+            "size_bytes": size,
+        }
+    return results
+
+
+def run_canada_parity(
+    configuration_file_path: str | Path = DEFAULT_CONFIGURATION,
+    south_policy_path: str | Path = DEFAULT_SOUTH_POLICY,
+    north_policy_path: str | Path = DEFAULT_NORTH_POLICY,
+    backbone_demand_path: str | Path = DEFAULT_BACKBONE_DEMAND,
+    validation_report: Any = DEFAULT_VALIDATION_REPORT,
+    result_dir: str | Path = DEFAULT_RESULT_DIR,
+    minimum_path_ratio: float = 0.8,
+    controller_factory: Callable = _default_controller_factory,
+    failure_injector: Callable | None = None,
+    sleep: Callable[[float], None] = time.sleep,
+    monotonic: Callable[[], float] = time.monotonic,
+    resource_sampler: Callable[[int], dict] = _default_resource_sample,
+    measurement_wait_s: float = 15.0,
+) -> Path:
+    """Run the fixed Canada scenario and return its result directory."""
+    if measurement_wait_s < 0:
+        raise ValueError("measurement_wait_s must be nonnegative")
+
+    configuration_file_path = Path(configuration_file_path).resolve()
+    south_policy_path = Path(south_policy_path).resolve()
+    north_policy_path = Path(north_policy_path).resolve()
+    backbone_demand_path = Path(backbone_demand_path).resolve()
+    result_dir = Path(result_dir).resolve()
+    report = (
+        _load_json(Path(validation_report).resolve())
+        if isinstance(validation_report, (str, Path))
+        else validation_report
+    )
+    config = _load_json(configuration_file_path)
+    south_policy = _load_json(south_policy_path)
+    north_policy = _load_json(north_policy_path)
+    block_positions = _load_json(
+        _configured_path(configuration_file_path, config, "block_positions_file")
+    )
+    backbone_demand = np.load(backbone_demand_path, allow_pickle=False)
+    traffic_matrix = np.load(
+        _configured_path(configuration_file_path, config, "traffic_matrix_file"),
+        allow_pickle=False,
+    )
+    validate_scenario_inputs(
+        GS_LAT_LONG,
+        GS_CELL,
+        south_policy,
+        north_policy,
+        block_positions,
+        backbone_demand,
+        traffic_matrix,
+        report,
+        minimum_ratio=minimum_path_ratio,
+    )
+
+    result_dir.mkdir(parents=True, exist_ok=True)
+    for epoch in OBSERVATION_EPOCHS:
+        for kind in ("ping", "traceroute", "iperf"):
+            path = result_dir / f"{kind}-epoch-{epoch}.txt"
+            if path.exists():
+                path.unlink()
+
+    iperf_rows: list[dict] = []
+    resource_rows: list[dict] = []
+    topology_rows: list[dict] = []
+    events: list[dict] = []
+    controller = None
+    try:
+        controller = controller_factory(
+            configuration_file_path, GS_LAT_LONG, GS_CELL
+        )
+        if controller.num_epochs <= 0:
+            raise ValueError("Canada parity requires at least one local epoch")
+        controller.init_remote_machine()
+        controller.create_nodes()
+        controller.create_links()
+        if controller.enable_failure_recovery:
+            controller.start_link_faliure_server()
+        controller.geopraphic_routing_policy = south_policy
+
+        for epoch in range(controller.num_epochs):
+            epoch_start = monotonic()
+            try:
+                controller.update_tinyleo_topology(epoch)
+            except Exception:
+                topology_rows.append(
+                    {
+                        "epoch": epoch,
+                        "duration_seconds": monotonic() - epoch_start,
+                        "status": "raised",
+                    }
+                )
+                raise
+            topology_rows.append(
+                {
+                    "epoch": epoch,
+                    "duration_seconds": monotonic() - epoch_start,
+                    "status": "returned",
+                }
+            )
+            if epoch == 0:
+                controller.deploy_tinyleo_srv6_agent()
+
+            if epoch == FAILURE_EPOCH:
+                failure_event = {
+                    "epoch": epoch,
+                    "event": "failure_injection",
+                    "status": "returned",
+                    "error": None,
+                }
+                try:
+                    if failure_injector is None:
+                        controller.tinyleo_fault_test()
+                    else:
+                        failure_injector(controller, epoch)
+                except Exception as exc:
+                    failure_event["status"] = "raised"
+                    failure_event["error"] = f"{type(exc).__name__}: {exc}"
+                    events.append(failure_event)
+                    raise
+                events.append(failure_event)
+
+            if epoch in OBSERVATION_EPOCHS:
+                measurements = _collect_measurements(
+                    controller,
+                    epoch,
+                    result_dir,
+                    sleep,
+                    measurement_wait_s,
+                )
+                iperf_rows.append(
+                    {
+                        "epoch": epoch,
+                        "phase": _phase(epoch),
+                        "source": SOURCE_GS,
+                        "destination": DESTINATION_GS,
+                        **measurements["iperf"],
+                    }
+                )
+                if epoch == RECOVERY_OBSERVATION_EPOCH:
+                    events.append(
+                        {
+                            "epoch": epoch,
+                            "event": "recovery_observation",
+                            "status": "measurement_attempted",
+                            "measurement_statuses": {
+                                kind: metadata["status"]
+                                for kind, metadata in measurements.items()
+                            },
+                            "note": "Observation status does not assert network recovery.",
+                        }
+                    )
+
+            sample = resource_sampler(epoch)
+            resource_rows.append(
+                {"epoch": epoch, **sample, "scope": RESOURCE_SCOPE}
+            )
+            if epoch != controller.num_epochs - 1:
+                elapsed = monotonic() - epoch_start
+                sleep(max(0.0, controller.topology_update_interval_s - elapsed))
+    finally:
+        try:
+            if controller is not None:
+                controller.clean()
+        finally:
+            _write_csv(
+                result_dir / "iperf-normal-and-recovery.csv",
+                IPERF_FIELDS,
+                iperf_rows,
+            )
+            _write_events(result_dir / "failure-recovery-events.json", events)
+            _write_csv(result_dir / "resource-usage.csv", RESOURCE_FIELDS, resource_rows)
+            _write_csv(
+                result_dir / "topology-update-times.csv",
+                TOPOLOGY_FIELDS,
+                topology_rows,
+            )
+    return result_dir
+
+
+def build_parser() -> argparse.ArgumentParser:
+    parser = argparse.ArgumentParser(
+        description="Run the noninteractive six-station Canada parity scenario"
+    )
+    parser.add_argument("--config", type=Path, default=DEFAULT_CONFIGURATION)
+    parser.add_argument("--south-policy", type=Path, default=DEFAULT_SOUTH_POLICY)
+    parser.add_argument("--north-policy", type=Path, default=DEFAULT_NORTH_POLICY)
+    parser.add_argument("--backbone-demand", type=Path, default=DEFAULT_BACKBONE_DEMAND)
+    parser.add_argument(
+        "--validation-report", type=Path, default=DEFAULT_VALIDATION_REPORT
+    )
+    parser.add_argument("--result-dir", type=Path, default=DEFAULT_RESULT_DIR)
+    parser.add_argument("--minimum-path-ratio", type=float, default=0.8)
+    parser.add_argument("--measurement-wait-s", type=float, default=15.0)
+    return parser
+
+
+def main(argv: list[str] | None = None) -> int:
+    args = build_parser().parse_args(argv)
+    run_canada_parity(
+        configuration_file_path=args.config,
+        south_policy_path=args.south_policy,
+        north_policy_path=args.north_policy,
+        backbone_demand_path=args.backbone_demand,
+        validation_report=args.validation_report,
+        result_dir=args.result_dir,
+        minimum_path_ratio=args.minimum_path_ratio,
+        measurement_wait_s=args.measurement_wait_s,
+    )
+    return 0
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())
