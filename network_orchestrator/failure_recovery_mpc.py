@@ -31,18 +31,38 @@ class MPCFaultHandler:
     in satellite constellations by utilizing Model Predictive Control techniques.
     """
     
-    def __init__(self, base_dir, topo_dir, timestamp=0):
+    def __init__(
+        self,
+        *,
+        topology_dir,
+        satellite_file,
+        grid_satellites_file,
+        runtime_epoch=0,
+        source_epoch=None,
+    ):
         """
         Initialize the MPC fault handler.
         
         Parameters:
-            base_dir (str): Base directory containing satellite data
-            topo_dir (str): Directory containing topology data
-            timestamp (int): Current timestamp for data retrieval
+            topology_dir (str): Runtime topology directory.
+            satellite_file (str): Explicit satellite trajectory artifact.
+            grid_satellites_file (str): Explicit grid coverage artifact.
+            runtime_epoch (int): Local runtime topology epoch.
+            source_epoch (int): Source artifact epoch mapped to runtime_epoch.
         """
-        self.base_dir = base_dir
-        self.topo_dir = topo_dir
-        self.timestamp = timestamp
+        if isinstance(runtime_epoch, bool) or not isinstance(runtime_epoch, int):
+            raise ValueError("runtime_epoch must be an integer")
+        if source_epoch is None:
+            source_epoch = runtime_epoch
+        if isinstance(source_epoch, bool) or not isinstance(source_epoch, int):
+            raise ValueError("source_epoch must be an integer")
+        if runtime_epoch < 0 or source_epoch < 0:
+            raise ValueError("runtime and source epochs must be nonnegative")
+        self.topology_dir = os.fspath(topology_dir)
+        self.satellite_file = os.fspath(satellite_file)
+        self.grid_satellites_file = os.fspath(grid_satellites_file)
+        self.timestamp = runtime_epoch
+        self.source_epoch = source_epoch
         self.load_data()
         
     def load_data(self):
@@ -58,19 +78,19 @@ class MPCFaultHandler:
         """
         # Load inter-domain topology
         self.inter_topology = np.load(
-            os.path.join(self.topo_dir, 'inter_topology', f'{self.timestamp}.npy'), 
+            os.path.join(self.topology_dir, 'inter_topology', f'{self.timestamp}.npy'),
             allow_pickle=True
         )
         
         # Load intra-domain topology
         self.intra_topology = np.load(
-            os.path.join(self.topo_dir, 'intra_topology', f'{self.timestamp}.npy'),
+            os.path.join(self.topology_dir, 'intra_topology', f'{self.timestamp}.npy'),
             allow_pickle=True
         ).item()
         
         # Load satellite parameters
         supply_data = np.load(
-            os.path.join(self.base_dir, "eval1_573_jinyao_24k_half.npy"), 
+            self.satellite_file,
             allow_pickle=True
         )
         
@@ -90,14 +110,24 @@ class MPCFaultHandler:
             }
             
             # Only load location for the current timestamp
-            self.satellite_locations[self.timestamp][idx] = sat_location[self.timestamp]
+            if self.source_epoch >= len(sat_location):
+                raise ValueError(
+                    f"satellite {idx} lacks source epoch {self.source_epoch}"
+                )
+            self.satellite_locations[self.timestamp][idx] = sat_location[
+                self.source_epoch
+            ]
         
         # Load grid-to-satellite coverage data
         grid_satellites = np.load(
-            os.path.join(self.base_dir, "new_grid_satellites.npy"), 
+            self.grid_satellites_file,
             allow_pickle=True
         ).item()
-        self.grid_satellites = grid_satellites[self.timestamp]
+        if self.source_epoch not in grid_satellites:
+            raise ValueError(
+                f"grid coverage lacks source epoch {self.source_epoch}"
+            )
+        self.grid_satellites = grid_satellites[self.source_epoch]
         
     def get_original_satellite_id(self, virtual_id):
         """
@@ -1068,33 +1098,3 @@ class MPCFaultHandler:
             print(f"Error: No link found between Satellite {failed_sat1} and Satellite {failed_sat2}")
             return None
 
-# Main program
-if __name__ == "__main__":
-    # Example usage
-    base_dir = "test/data/topo_data"  # Data directory
-    topo_dir = "test/tinyleo-Arbitrary-LeastDelay"  # Topology data directory
-    
-    # Initialize MPC fault handler
-    mpc = MPCFaultHandler(base_dir=base_dir, topo_dir=topo_dir, timestamp=0)
-    
-    # Specify the two satellite IDs of the failed link
-    # failed_satellite1 = 1044  # First failed satellite ID
-    # failed_satellite2 = 750  # Second failed satellite ID
-
-    failed_satellite1 = 1482  # First failed satellite ID
-    failed_satellite2 = 1595  # Second failed satellite ID
-    
-    # Process the failure and get the repaired topology
-    result = mpc.handle_link_failure(failed_satellite1, failed_satellite2)
-    print(result)
-    if result:
-        # Print replacement information (if available)
-        if 'replacement_info' in result:
-            rep_info = result['replacement_info']
-            print(f"\nReplacement Information Summary:")
-            print(f"  Removed satellite: {rep_info['removed_satellite']} (Virtual ID: {rep_info['removed_virtual_id']})")
-            print(f"  Replacement satellite: {rep_info['replacement_satellite']} (Virtual ID: {rep_info['replacement_virtual_id']})")
-            print(f"  Grid ID: {rep_info['grid']}")
-        else:
-            print("\nNo suitable replacement satellite found, only removed the failed link")
-        

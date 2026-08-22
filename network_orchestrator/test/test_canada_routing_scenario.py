@@ -88,6 +88,7 @@ def _write_scenario_inputs(root: Path, epochs=12):
     )
     report = {
         "valid": True,
+        "satellite_count": 80,
         "expected_epochs": epochs,
         "path_epoch_ratio": 1.0,
         "epochs": [
@@ -150,7 +151,15 @@ class FakeController:
         self._call("deploy")
         return {
             "remote_acknowledgements": [
-                {"remote_id": 0, "expected_count": 86, "started_count": 86}
+                {
+                    "remote_id": 0,
+                    "expected_count": 86,
+                    "started_count": 86,
+                    "agents": [
+                        {"name": f"node-{index}", "namespace_pid": 1000 + index}
+                        for index in range(86)
+                    ],
+                }
             ]
         }
 
@@ -532,7 +541,15 @@ def test_main_nondefault_options_are_hidden_only_during_real_factory_constructio
         "deploy_tinyleo_srv6_agent",
         lambda self: {
             "remote_acknowledgements": [
-                {"remote_id": 0, "expected_count": 1, "started_count": 1}
+                {
+                    "remote_id": 0,
+                    "expected_count": 86,
+                    "started_count": 86,
+                    "agents": [
+                        {"name": f"node-{index}", "namespace_pid": 1000 + index}
+                        for index in range(86)
+                    ],
+                }
             ]
         },
     )
@@ -702,6 +719,7 @@ def test_runner_writes_observations_and_metadata_schemas(tmp_path):
         "started_count"
     ] == 86
     assert events["events"][1]["event"] == "failure_injection"
+    assert events["events"][1]["interruption_seconds"] > 0
     assert events["events"][1]["acknowledgement"]["failed_link"] == [
         "SH1SAT10",
         "SH1SAT11",
@@ -714,6 +732,8 @@ def test_runner_writes_observations_and_metadata_schemas(tmp_path):
     )
     assert metadata["routing_mode"] == "shortest"
     assert metadata["applied_policy"] == {"[3, 2]->[3, 4]": [[3, 3]]}
+    assert metadata["source"] == "GS4"
+    assert metadata["destination"] == "GS6"
 
     with (result_dir / "resource-usage.csv").open(
         newline="", encoding="utf-8"
@@ -810,6 +830,54 @@ def test_noop_failure_without_remote_ack_is_rejected(tmp_path):
     )
     assert events["events"][-1]["event"] == "failure_injection"
     assert events["events"][-1]["status"] == "raised"
+
+
+@pytest.mark.parametrize(
+    "acknowledgements",
+    [
+        [
+            {
+                "remote_id": 0,
+                "expected_count": 85,
+                "started_count": 85,
+                "agents": [
+                    {"name": f"node-{index}", "namespace_pid": 1000 + index}
+                    for index in range(85)
+                ],
+            }
+        ],
+        [
+            {
+                "remote_id": 0,
+                "expected_count": 43,
+                "started_count": 43,
+                "agents": [
+                    {"name": f"a-{index}", "namespace_pid": 1000 + index}
+                    for index in range(43)
+                ],
+            },
+            {
+                "remote_id": 0,
+                "expected_count": 43,
+                "started_count": 43,
+                "agents": [
+                    {"name": f"b-{index}", "namespace_pid": 2000 + index}
+                    for index in range(43)
+                ],
+            },
+        ],
+    ],
+)
+def test_srv6_ack_rejects_partial_or_duplicate_remote_results(
+    acknowledgements,
+):
+    module = _load_scenario_module("example_canada_parity_bad_srv6_ack")
+
+    with pytest.raises(ValueError, match="SRv6"):
+        module._validate_srv6_acknowledgement(
+            {"remote_acknowledgements": acknowledgements},
+            expected_total=86,
+        )
 
 
 def test_routing_modes_apply_exact_fixed_policies_and_write_metadata(tmp_path):

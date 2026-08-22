@@ -4,9 +4,11 @@ from __future__ import annotations
 
 import argparse
 import csv
+import hashlib
 import json
 import math
 import re
+import statistics
 from pathlib import Path
 from typing import Any
 
@@ -15,6 +17,7 @@ import numpy as np
 
 EXPECTED_EPOCHS = tuple(range(12))
 ACTIVE_GRID_IDS = (12, 13, 14, 23, 24, 25)
+EXPECTED_OBSERVATION_EPOCHS = (0, 5, 6, 7, 11)
 GIB = 1024**3
 GATE_REQUIREMENTS = {
     "validation_report": "valid == true, errors is empty, and report schema is valid",
@@ -28,9 +31,9 @@ GATE_REQUIREMENTS = {
     "path_diversity": "recomputed edge_disjoint_paths >= 2 ratio >= 0.80 and matches report",
     "topology_changes": "topology_change_count >= 3",
     "gateway_handovers": "gateway_handover_count >= 2",
-    "ping_reply": "at least one Vancouver-to-Toronto ping artifact reports received > 0",
-    "srv6_deployment": "every expected namespace agent is acknowledged alive after startup",
-    "failure_recovery": "epoch-6 failure returned; epoch-7 captured ping/traceroute prove a changed live path",
+    "ping_reply": "exact GS4-to-GS6 epoch artifacts parse and at least one reports received > 0",
+    "srv6_deployment": "unique remote acknowledgements cover satellite_count + 6 live agents",
+    "failure_recovery": "timed epoch-6 remote failure ack; epoch-7 ping/traceroute prove recovery",
 }
 
 
@@ -176,6 +179,11 @@ _PING_SUMMARY = re.compile(
 )
 _HOP_LINE = re.compile(r"^\s*(\d+)\s+(.+?)\s*$")
 _IPV4 = re.compile(r"(?<![\d.])(?:\d{1,3}\.){3}\d{1,3}(?![\d.])")
+_RTT_SUMMARY = re.compile(
+    r"(?:rtt|round-trip).*?=\s*"
+    r"\d+(?:\.\d+)?/(\d+(?:\.\d+)?)/\d+(?:\.\d+)?",
+    re.IGNORECASE,
+)
 
 
 def _ping_stats(path: Path) -> dict[str, int | float] | None:
@@ -229,6 +237,205 @@ def _traceroute_path(path: Path) -> tuple[str, ...] | None:
     return tuple(hops) or None
 
 
+def _comparison_ping_stats(path: Path, *, allow_total_outage: bool) -> dict:
+    stats = _ping_stats(path)
+    if stats is None:
+        raise ValueError(f"unparseable packet-level ping: {path}")
+    text = path.read_text(encoding="utf-8")
+    rtt_matches = _RTT_SUMMARY.findall(text)
+    if stats["received"] == 0:
+        if not allow_total_outage:
+            raise ValueError(f"recovery ping has no live replies: {path}")
+        if rtt_matches:
+            raise ValueError(f"zero-reply ping contains contradictory RTT data: {path}")
+        latency = None
+    else:
+        if len(rtt_matches) != 1:
+            raise ValueError(f"live ping has no unique RTT summary: {path}")
+        latency = float(rtt_matches[0])
+    return {
+        "received": stats["received"],
+        "loss_percent": stats["loss_percent"],
+        "average_latency_ms": latency,
+    }
+
+
+def _comparison_mode(root: Path, mode: str) -> dict:
+    result = root / mode / "results"
+    acceptance = _json_object(result / "acceptance_summary.json", "acceptance summary")
+    if acceptance.get("valid") is not True:
+        raise ValueError(f"{mode} acceptance did not pass")
+    metrics = acceptance.get("metrics")
+    if not isinstance(metrics, dict):
+        raise ValueError(f"{mode} acceptance metrics are missing")
+    peak_rss = int(
+        _number(
+            metrics.get("peak_process_rss_bytes"),
+            f"{mode} validated peak process RSS",
+            integer=True,
+        )
+    )
+    recovery_loss = float(
+        _number(
+            metrics.get("recovery_ping_loss_percent"),
+            f"{mode} validated recovery ping loss",
+        )
+    )
+    if peak_rss <= 0 or recovery_loss > 100:
+        raise ValueError(f"{mode} acceptance metrics are outside valid bounds")
+
+    metadata = _json_object(result / "scenario-metadata.json", "scenario metadata")
+    if (
+        metadata.get("routing_mode") != mode
+        or metadata.get("source") != "GS4"
+        or metadata.get("destination") != "GS6"
+        or metadata.get("num_epochs") != 12
+        or metadata.get("failure_epoch") != 6
+        or metadata.get("recovery_observation_epoch") != 7
+    ):
+        raise ValueError(f"{mode} scenario metadata does not describe the fixed run")
+
+    events_payload = _json_object(
+        result / "failure-recovery-events.json", "failure/recovery events"
+    )
+    events = events_payload.get("events")
+    if not isinstance(events, list):
+        raise ValueError(f"{mode} failure/recovery events are missing")
+    failures = [
+        event
+        for event in events
+        if isinstance(event, dict)
+        and event.get("event") == "failure_injection"
+        and event.get("epoch") == 6
+        and event.get("status") == "returned"
+    ]
+    if len(failures) != 1:
+        raise ValueError(f"{mode} requires one acknowledged epoch-6 failure")
+    failure = failures[0]
+    interruption = float(
+        _number(
+            failure.get("interruption_seconds"),
+            f"{mode} failure/recovery interruption",
+        )
+    )
+    if interruption <= 0:
+        raise ValueError(f"{mode} failure/recovery interruption must be positive")
+    acknowledgement = failure.get("acknowledgement")
+    if not isinstance(acknowledgement, dict):
+        raise ValueError(f"{mode} failure acknowledgement is missing")
+    failure_identity = {
+        "failed_link": acknowledgement.get("failed_link"),
+        "removed_satellite": acknowledgement.get("removed_satellite"),
+        "replacement_satellite": acknowledgement.get("replacement_satellite"),
+        "remote_id": acknowledgement.get("remote_id"),
+    }
+    if (
+        not isinstance(failure_identity["failed_link"], list)
+        or len(failure_identity["failed_link"]) != 2
+        or not all(
+            isinstance(node, str) and node
+            for node in failure_identity["failed_link"]
+        )
+        or failure_identity["removed_satellite"]
+        not in failure_identity["failed_link"]
+        or not isinstance(failure_identity["replacement_satellite"], str)
+        or not failure_identity["replacement_satellite"]
+        or isinstance(failure_identity["remote_id"], bool)
+        or not isinstance(failure_identity["remote_id"], int)
+        or failure_identity["remote_id"] < 0
+    ):
+        raise ValueError(f"{mode} failure acknowledgement identity is invalid")
+
+    expected_names = {
+        f"ping-epoch-{epoch}.txt" for epoch in EXPECTED_OBSERVATION_EPOCHS
+    }
+    ping_paths = sorted(result.glob("ping-epoch-*.txt"))
+    traceroute_paths = sorted(result.glob("traceroute-epoch-*.txt"))
+    if {path.name for path in ping_paths} != expected_names:
+        raise ValueError(f"{mode} ping evidence epochs are incomplete or contain extras")
+    expected_traceroutes = {
+        f"traceroute-epoch-{epoch}.txt" for epoch in EXPECTED_OBSERVATION_EPOCHS
+    }
+    if {path.name for path in traceroute_paths} != expected_traceroutes:
+        raise ValueError(
+            f"{mode} traceroute evidence epochs are incomplete or contain extras"
+        )
+
+    per_epoch = {}
+    latency_samples = []
+    loss_samples = []
+    hop_samples = []
+    for epoch in EXPECTED_OBSERVATION_EPOCHS:
+        ping = _comparison_ping_stats(
+            result / f"ping-epoch-{epoch}.txt",
+            allow_total_outage=epoch == 6,
+        )
+        path = _traceroute_path(result / f"traceroute-epoch-{epoch}.txt")
+        if path is None and not (epoch == 6 and ping["received"] == 0):
+            raise ValueError(f"{mode} traceroute epoch {epoch} is unparseable")
+        hops = len(path) if path is not None else None
+        per_epoch[str(epoch)] = {**ping, "traceroute_hops": hops}
+        if ping["average_latency_ms"] is not None:
+            latency_samples.append(ping["average_latency_ms"])
+        loss_samples.append(ping["loss_percent"])
+        if hops is not None:
+            hop_samples.append(hops)
+    if per_epoch["7"]["received"] <= 0:
+        raise ValueError(f"{mode} recovery epoch has no live replies")
+
+    return {
+        "routing_mode": mode,
+        "flow": {"source": "GS4", "destination": "GS6"},
+        "failure_schedule": {
+            "failure_epoch": 6,
+            "recovery_observation_epoch": 7,
+        },
+        "failure_identity": failure_identity,
+        "per_epoch": per_epoch,
+        "mean_traceroute_hops": statistics.fmean(hop_samples),
+        "mean_latency_ms": statistics.fmean(latency_samples),
+        "mean_loss_percent": statistics.fmean(loss_samples),
+        "failure_recovery_interruption_seconds": interruption,
+        "validated_peak_process_rss_bytes": peak_rss,
+        "validated_recovery_ping_loss_percent": recovery_loss,
+    }
+
+
+def compare_routing_runs(ab_root: str | Path) -> dict:
+    """Compare two privileged fixed-artifact routing runs and write JSON evidence."""
+    root = Path(ab_root)
+    shortest = _comparison_mode(root, "shortest")
+    geographic = _comparison_mode(root, "geographic")
+    if shortest["failure_schedule"] != geographic["failure_schedule"]:
+        raise ValueError("A/B failure schedules differ")
+    if shortest["failure_identity"] != geographic["failure_identity"]:
+        raise ValueError("A/B deterministic failure/replacement identities differ")
+    manifest = root / "fixed-artifact-sha256.txt"
+    try:
+        manifest_digest = hashlib.sha256(manifest.read_bytes()).hexdigest()
+    except OSError as exc:
+        raise ValueError(f"cannot read fixed artifact manifest {manifest}: {exc}") from exc
+    comparison = {
+        "fixed_artifact_manifest_sha256": manifest_digest,
+        "shortest": shortest,
+        "geographic": geographic,
+        "geographic_minus_shortest": {
+            name: geographic[name] - shortest[name]
+            for name in (
+                "mean_traceroute_hops",
+                "mean_latency_ms",
+                "mean_loss_percent",
+                "failure_recovery_interruption_seconds",
+            )
+        },
+    }
+    (root / "routing_ab_comparison.json").write_text(
+        json.dumps(comparison, indent=2, sort_keys=True, allow_nan=False) + "\n",
+        encoding="utf-8",
+    )
+    return comparison
+
+
 def _set(gates: dict[str, dict], name: str, passed: bool, actual: Any, evidence: str) -> None:
     gates[name].update(passed=bool(passed), actual=actual, evidence=evidence)
 
@@ -250,6 +457,7 @@ def check_results(
         "ping_loss_percent_by_artifact": {},
         "minimum_ping_loss_percent": None,
         "recovery_ping_loss_percent": None,
+        "failure_recovery_interruption_seconds": None,
     }
 
     validation_epochs_exact = False
@@ -464,9 +672,38 @@ def check_results(
     )
 
     ping_evidence = []
-    for path in sorted(result_dir.glob("ping-epoch-*.txt")):
-        stats = _ping_stats(path)
-        ping_evidence.append({"artifact": path.name, "stats": stats})
+    expected_ping_names = {
+        f"ping-epoch-{epoch}.txt" for epoch in EXPECTED_OBSERVATION_EPOCHS
+    }
+    actual_ping_paths = sorted(result_dir.glob("ping-epoch-*.txt"))
+    actual_ping_names = {path.name for path in actual_ping_paths}
+    flow_ok = False
+    try:
+        scenario_metadata = _json_object(
+            result_dir / "scenario-metadata.json", "scenario metadata"
+        )
+        flow_ok = (
+            scenario_metadata.get("source") == "GS4"
+            and scenario_metadata.get("destination") == "GS6"
+            and scenario_metadata.get("num_epochs") == 12
+        )
+    except (ValueError, TypeError) as exc:
+        errors.append(str(exc))
+        scenario_metadata = None
+    for path in actual_ping_paths:
+        stats = _ping_stats(path) if path.name in expected_ping_names else None
+        ping_evidence.append(
+            {
+                "artifact": path.name,
+                "source": scenario_metadata.get("source")
+                if isinstance(scenario_metadata, dict)
+                else None,
+                "destination": scenario_metadata.get("destination")
+                if isinstance(scenario_metadata, dict)
+                else None,
+                "stats": stats,
+            }
+        )
         if stats is not None:
             metrics["ping_loss_percent_by_artifact"][path.name] = stats[
                 "loss_percent"
@@ -481,7 +718,10 @@ def check_results(
     _set(
         gates,
         "ping_reply",
-        any(
+        flow_ok
+        and actual_ping_names == expected_ping_names
+        and all(item["stats"] is not None for item in ping_evidence)
+        and any(
             item["stats"] is not None and item["stats"]["received"] > 0
             for item in ping_evidence
         ),
@@ -523,26 +763,66 @@ def check_results(
             if isinstance(deployment_ack, dict)
             else None
         )
-        deployment_ok = isinstance(remote_deployments, list) and bool(
-            remote_deployments
-        )
+        deployment_ok = isinstance(remote_deployments, list) and bool(remote_deployments)
+        remote_ids = set()
+        agent_names = set()
+        started_total = 0
         if deployment_ok:
             for acknowledgement in remote_deployments:
                 if not isinstance(acknowledgement, dict):
                     deployment_ok = False
                     break
+                remote_id = acknowledgement.get("remote_id")
                 expected = acknowledgement.get("expected_count")
                 started = acknowledgement.get("started_count")
+                agents = acknowledgement.get("agents")
                 if (
-                    isinstance(expected, bool)
+                    isinstance(remote_id, bool)
+                    or not isinstance(remote_id, int)
+                    or remote_id < 0
+                    or remote_id in remote_ids
+                    or isinstance(expected, bool)
                     or not isinstance(expected, int)
                     or expected <= 0
                     or isinstance(started, bool)
                     or not isinstance(started, int)
                     or started != expected
+                    or not isinstance(agents, list)
+                    or len(agents) != expected
                 ):
                     deployment_ok = False
                     break
+                remote_ids.add(remote_id)
+                started_total += started
+                for agent in agents:
+                    if not isinstance(agent, dict):
+                        deployment_ok = False
+                        break
+                    name = agent.get("name")
+                    namespace_pid = agent.get("namespace_pid")
+                    if (
+                        not isinstance(name, str)
+                        or not name
+                        or name in agent_names
+                        or isinstance(namespace_pid, bool)
+                        or not isinstance(namespace_pid, int)
+                        or namespace_pid <= 0
+                    ):
+                        deployment_ok = False
+                        break
+                    agent_names.add(name)
+                if not deployment_ok:
+                    break
+        expected_agent_total = (
+            validation_satellite_count + len(ACTIVE_GRID_IDS)
+            if validation_satellite_count is not None
+            else None
+        )
+        deployment_ok = (
+            deployment_ok
+            and expected_agent_total is not None
+            and started_total == expected_agent_total
+        )
         _set(
             gates,
             "srv6_deployment",
@@ -566,6 +846,11 @@ def check_results(
         replacement = failure_ack.get("replacement_satellite")
         updated = failure_ack.get("updated_satellites")
         remote_id = failure_ack.get("remote_id")
+        interruption = _number(
+            failures[0].get("interruption_seconds"),
+            "failure interruption_seconds",
+        )
+        metrics["failure_recovery_interruption_seconds"] = interruption
         acknowledgement_ok = (
             isinstance(failed_link, list)
             and len(failed_link) == 2
@@ -599,6 +884,7 @@ def check_results(
         recovery_ok = (
             captured
             and acknowledgement_ok
+            and interruption > 0
             and epoch7_stats is not None
             and epoch7_stats["received"] > 0
             and before_path is not None
@@ -612,6 +898,7 @@ def check_results(
             recovery_ok,
             {
                 "failure_status": failures[0].get("status"),
+                "failure_recovery_interruption_seconds": interruption,
                 "failure_acknowledgement": failure_ack,
                 "measurement_statuses": statuses,
                 "epoch7_ping": epoch7_stats,

@@ -915,7 +915,8 @@ def sat_link_change(workdir,sat):
 
 def fault_test(workdir, ts, sat_mid_dict_shell, gs_mid_dict, ip_lst,
                 isl_bw, isl_loss, gsl_bw, gsl_loss, sat1, sat2,
-                controller_endpoint=DEFAULT_FAILURE_CONTROLLER_ENDPOINT):
+                controller_endpoint=DEFAULT_FAILURE_CONTROLLER_ENDPOINT, *,
+                remote_id):
     """
     Simulates a fault test by introducing a link failure between two satellites and updating the network state.
 
@@ -985,7 +986,11 @@ def fault_test(workdir, ts, sat_mid_dict_shell, gs_mid_dict, ip_lst,
             sat_link_change(workdir,sat)
     else:
         raise RuntimeError("failure recovery returned no updated satellites")
-    return acknowledgement
+    if isinstance(remote_id, bool) or not isinstance(remote_id, int) or remote_id < 0:
+        raise ValueError("remote_id must be a nonnegative integer")
+    remote_acknowledgement = dict(acknowledgement)
+    remote_acknowledgement['remote_id'] = remote_id
+    return remote_acknowledgement
     
 def replace_shared_memory(name, data):
     """
@@ -1216,7 +1221,7 @@ if __name__ == '__main__':
         acknowledgement = fault_test(
             workdir, ts, sat_mid_dict_shell, gs_mid_dict, ip_lst,
             isl_bw, isl_loss, gsl_bw, gsl_loss, sys.argv[9], sys.argv[10],
-            sys.argv[11]
+            sys.argv[11], remote_id=machine_id
         )
         print(
             'TINYLEO_FAILURE_ACK=' +

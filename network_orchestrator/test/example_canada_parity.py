@@ -384,19 +384,28 @@ def _phase(epoch: int) -> str:
     }[epoch]
 
 
-def _validate_srv6_acknowledgement(value: Any) -> dict:
+def _validate_srv6_acknowledgement(value: Any, *, expected_total: int) -> dict:
     if not isinstance(value, dict):
         raise ValueError("SRv6 deployment acknowledgement must be an object")
     acknowledgements = value.get("remote_acknowledgements")
     if not isinstance(acknowledgements, list) or not acknowledgements:
         raise ValueError("SRv6 deployment acknowledgement must list remote results")
+    remote_ids = set()
+    agent_names = set()
+    started_total = 0
     for acknowledgement in acknowledgements:
         if not isinstance(acknowledgement, dict):
             raise ValueError("each SRv6 remote acknowledgement must be an object")
+        remote_id = acknowledgement.get("remote_id")
         expected = acknowledgement.get("expected_count")
         started = acknowledgement.get("started_count")
+        agents = acknowledgement.get("agents")
         if (
-            isinstance(expected, bool)
+            isinstance(remote_id, bool)
+            or not isinstance(remote_id, int)
+            or remote_id < 0
+            or remote_id in remote_ids
+            or isinstance(expected, bool)
             or not isinstance(expected, int)
             or expected <= 0
             or isinstance(started, bool)
@@ -404,6 +413,29 @@ def _validate_srv6_acknowledgement(value: Any) -> dict:
             or started != expected
         ):
             raise ValueError("SRv6 deployment did not start every expected agent")
+        if not isinstance(agents, list) or len(agents) != expected:
+            raise ValueError("SRv6 acknowledgement must identify every agent")
+        remote_ids.add(remote_id)
+        started_total += started
+        for agent in agents:
+            if not isinstance(agent, dict):
+                raise ValueError("SRv6 agent identity must be an object")
+            name = agent.get("name")
+            namespace_pid = agent.get("namespace_pid")
+            if (
+                not isinstance(name, str)
+                or not name
+                or name in agent_names
+                or isinstance(namespace_pid, bool)
+                or not isinstance(namespace_pid, int)
+                or namespace_pid <= 0
+            ):
+                raise ValueError("SRv6 agent identity is invalid or duplicated")
+            agent_names.add(name)
+    if started_total != expected_total:
+        raise ValueError(
+            f"SRv6 started {started_total} agents; expected exactly {expected_total}"
+        )
     return value
 
 
@@ -640,6 +672,14 @@ def run_canada_parity(
         minimum_ratio=minimum_path_ratio,
         configured_num_epochs=configured_num_epochs,
     )
+    satellite_count = report.get("satellite_count")
+    if (
+        isinstance(satellite_count, bool)
+        or not isinstance(satellite_count, int)
+        or satellite_count <= 0
+    ):
+        raise ValueError("validation report satellite_count must be positive")
+    expected_agent_total = satellite_count + len(GS_LAT_LONG)
     applied_policy = south_policy if routing_mode == "shortest" else north_policy
 
     result_dir.mkdir(parents=True, exist_ok=True)
@@ -723,7 +763,8 @@ def run_canada_parity(
                 }
                 try:
                     deployment_ack = _validate_srv6_acknowledgement(
-                        controller.deploy_tinyleo_srv6_agent()
+                        controller.deploy_tinyleo_srv6_agent(),
+                        expected_total=expected_agent_total,
                     )
                     deployment_event["acknowledgement"] = deployment_ack
                 except Exception as exc:
@@ -740,6 +781,7 @@ def run_canada_parity(
                     "status": "returned",
                     "error": None,
                 }
+                failure_started = monotonic()
                 try:
                     if failure_injector is None:
                         acknowledgement = controller.tinyleo_fault_test()
@@ -751,8 +793,14 @@ def run_canada_parity(
                 except Exception as exc:
                     failure_event["status"] = "raised"
                     failure_event["error"] = f"{type(exc).__name__}: {exc}"
+                    failure_event["interruption_seconds"] = (
+                        monotonic() - failure_started
+                    )
                     events.append(failure_event)
                     raise
+                failure_event["interruption_seconds"] = (
+                    monotonic() - failure_started
+                )
                 events.append(failure_event)
 
             if epoch in OBSERVATION_EPOCHS:

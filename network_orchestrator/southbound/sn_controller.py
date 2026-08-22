@@ -182,7 +182,13 @@ class RemoteController():
         """
         failed_link = [sat1, sat2]
         print(f"Link failure between {sat1} and {sat2}")
-        mpc = MPCFaultHandler(self.topo_dir,self.local_dir,self.ts)
+        mpc = MPCFaultHandler(
+            topology_dir=self.local_dir,
+            satellite_file=self.satellite_file,
+            grid_satellites_file=self.grid_satellites_file,
+            runtime_epoch=self.ts,
+            source_epoch=self.start_epoch + self.ts,
+        )
         result = mpc.handle_link_failure(get_satellite_id(sat1), get_satellite_id(sat2))
         update_sats = set()
         if not result or 'replacement_info' not in result:
@@ -375,15 +381,27 @@ class RemoteController():
                     self.remote_lst,
                 )
             )
+        remote_ids = set()
         for acknowledgement in acknowledgements:
             if not isinstance(acknowledgement, dict):
                 raise RuntimeError("SRv6 deployment returned no acknowledgement")
+            remote_id = acknowledgement.get('remote_id')
+            if (
+                isinstance(remote_id, bool)
+                or not isinstance(remote_id, int)
+                or remote_id < 0
+                or remote_id in remote_ids
+            ):
+                raise RuntimeError("SRv6 deployment remote identity is invalid")
+            remote_ids.add(remote_id)
             if (
                 acknowledgement.get('expected_count', 0) <= 0
                 or acknowledgement.get('started_count')
                 != acknowledgement.get('expected_count')
             ):
                 raise RuntimeError("SRv6 deployment did not start every agent")
+        if remote_ids != {remote.id for remote in self.remote_lst}:
+            raise RuntimeError("SRv6 deployment acknowledgements are incomplete")
         end = time.time()
         print(end-update_start, "s for srv6 agent deploy\n")
         return {'remote_acknowledgements': acknowledgements}
@@ -849,7 +867,8 @@ class RemoteMachine:
                 "remote fault command returned no unique acknowledgement"
             )
         acknowledgement = acknowledgements[0]
-        acknowledgement['remote_id'] = self.id
+        if acknowledgement.get('remote_id') != self.id:
+            raise RuntimeError("remote fault acknowledged a different remote")
         return acknowledgement
 
     def deploy_tinyleo_srv6_agent(self):
@@ -862,6 +881,7 @@ class RemoteMachine:
                 f"{self.dir}/controller/geographic_srv6_anycast/deploy_srv6_agent.py",
                 "--workdir", self.dir,
                 "--python-executable", self.remote_python,
+                "--remote-id", self.id,
             )
         )
         marker = 'TINYLEO_SRV6_DEPLOY_ACK='
@@ -875,7 +895,8 @@ class RemoteMachine:
                 "SRv6 deploy command returned no unique acknowledgement"
             )
         acknowledgement = acknowledgements[0]
-        acknowledgement['remote_id'] = self.id
+        if acknowledgement.get('remote_id') != self.id:
+            raise RuntimeError("SRv6 deploy acknowledged a different remote")
         return acknowledgement
 
     def ping_async(self, res_path, src, dst):

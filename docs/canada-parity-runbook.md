@@ -432,6 +432,7 @@ and collect packet-level evidence. An offline `find_path` call is not
 acceptance evidence.
 
 ```bash
+set -euo pipefail
 export SELECTED_SCALE=80  # replace only with the scale selected above
 export SCALE_DIR="$RUN_ROOT/scale-$SELECTED_SCALE"
 export AB_ROOT="$SCALE_DIR/formal-ab"
@@ -539,10 +540,13 @@ PY
 done
 ```
 
-The absolute venv interpreter recorded in each config launches remote commands
-and namespace agents. Container creation bind-mounts the current experiment's
-dynamic `controller` directory at `/resources/controller`; no legacy
-experiment path is assumed. Each deployment must acknowledge every live SRv6 agent.
+The absolute host venv interpreter recorded in each config launches remote
+commands and the controller-source `srv6_agent.py`. `nsenter` joins each
+target's UTS, IPC, network, and PID namespaces without changing to its mount
+namespace, so both the configured host interpreter and the verified host
+controller source remain addressable; no legacy experiment path is assumed.
+Each deployment must acknowledge exactly the validated satellite count plus
+the six ground-station agents, with unique remote and namespace identities.
 Failure injection deterministically selects the lexicographically first
 same-machine physical ISL; its acknowledgement is written only after remote
 mutation and recovery complete, and names the failed link, removed satellite,
@@ -557,153 +561,24 @@ continue the comparison.
 
 Build the comparison only after both complete acceptance summaries pass. This
 script fails if the scenarios did not use the same failure schedule and link,
-or if packet-level latency, loss, or hop evidence is unparseable. Update
-interruption is the maximum real topology-update duration at failure epoch 6
-and recovery-observation epoch 7.
+replacement, or if packet-level latency, loss, or hop evidence is unparseable.
+Epoch 6 may have zero replies, 100% loss, and therefore no RTT summary; epoch 7
+may likewise have no resolved traceroute hops, represented as JSON `null`.
+Epoch 7 must have a positive reply count, parseable RTT, and resolved path.
+Failure/recovery
+interruption comes only from the separately timed interval surrounding remote
+injection, acknowledgement, and recovery—not from an ordinary topology update.
 
 ```bash
-"$PYTHON_BIN" - "$AB_ROOT" <<'PY'
-import csv
-import hashlib
+PYTHONPATH="$REPO/network_orchestrator" \
+  "$PYTHON_BIN" - "$AB_ROOT" <<'PY'
 import json
-import re
-import statistics
 import sys
-from pathlib import Path
 
-root = Path(sys.argv[1])
-ping_summary = re.compile(
-    r"(\d+) packets transmitted,\s*(\d+) (?:packets )?received,.*?"
-    r"(\d+(?:\.\d+)?)% packet loss",
-    re.IGNORECASE,
-)
-rtt_summary = re.compile(
-    r"(?:rtt|round-trip).*?=\s*"
-    r"\d+(?:\.\d+)?/(\d+(?:\.\d+)?)/\d+(?:\.\d+)?",
-    re.IGNORECASE,
-)
-hop_line = re.compile(r"^\s*(\d+)\s+\S+", re.MULTILINE)
+from test.check_canada_parity_results import compare_routing_runs
 
-
-def read_ping(path):
-    text = path.read_text(encoding="utf-8")
-    packet = ping_summary.search(text)
-    rtt = rtt_summary.search(text)
-    if not packet or not rtt:
-        raise SystemExit(f"unparseable packet-level ping: {path}")
-    sent, received, loss = packet.groups()
-    if int(sent) <= 0 or int(received) <= 0:
-        raise SystemExit(f"ping has no live replies: {path}")
-    return {
-        "received": int(received),
-        "loss_percent": float(loss),
-        "average_latency_ms": float(rtt.group(1)),
-    }
-
-
-def read_hops(path):
-    count = len(hop_line.findall(path.read_text(encoding="utf-8")))
-    if count <= 0:
-        raise SystemExit(f"unparseable traceroute hops: {path}")
-    return count
-
-
-def read_mode(mode):
-    result = root / mode / "results"
-    acceptance = json.loads(
-        (result / "acceptance_summary.json").read_text(encoding="utf-8")
-    )
-    if acceptance.get("valid") is not True:
-        raise SystemExit(f"{mode} acceptance did not pass")
-    metadata = json.loads(
-        (result / "scenario-metadata.json").read_text(encoding="utf-8")
-    )
-    if metadata.get("routing_mode") != mode:
-        raise SystemExit(f"{mode} result declares a different routing mode")
-    events = json.loads(
-        (result / "failure-recovery-events.json").read_text(encoding="utf-8")
-    )["events"]
-    failure = next(
-        event for event in events
-        if event.get("event") == "failure_injection" and event.get("epoch") == 6
-    )
-    pings = {
-        path.stem.rsplit("-", 1)[-1]: read_ping(path)
-        for path in sorted(result.glob("ping-epoch-*.txt"))
-    }
-    hops = {
-        path.stem.rsplit("-", 1)[-1]: read_hops(path)
-        for path in sorted(result.glob("traceroute-epoch-*.txt"))
-    }
-    if set(pings) != set(hops) or not pings:
-        raise SystemExit(f"{mode} ping/traceroute epochs differ")
-    with (result / "topology-update-times.csv").open(newline="") as stream:
-        updates = {
-            int(row["epoch"]): float(row["duration_seconds"])
-            for row in csv.DictReader(stream)
-            if row["status"] == "returned"
-        }
-    if 6 not in updates or 7 not in updates:
-        raise SystemExit(f"{mode} lacks failure-window update timing")
-    per_epoch = {
-        epoch: {**pings[epoch], "traceroute_hops": hops[epoch]}
-        for epoch in sorted(pings, key=int)
-    }
-    return {
-        "routing_mode": metadata["routing_mode"],
-        "failure_schedule": {
-            "failure_epoch": metadata["failure_epoch"],
-            "recovery_observation_epoch": metadata["recovery_observation_epoch"],
-        },
-        "failed_link": failure["acknowledgement"]["failed_link"],
-        "per_epoch": per_epoch,
-        "mean_traceroute_hops": statistics.fmean(hops.values()),
-        "mean_latency_ms": statistics.fmean(
-            item["average_latency_ms"] for item in pings.values()
-        ),
-        "mean_loss_percent": statistics.fmean(
-            item["loss_percent"] for item in pings.values()
-        ),
-        "failure_window_update_interruption_seconds": max(updates[6], updates[7]),
-        "validated_peak_process_rss_bytes": acceptance["metrics"][
-            "peak_process_rss_bytes"
-        ],
-        "validated_recovery_ping_loss_percent": acceptance["metrics"][
-            "recovery_ping_loss_percent"
-        ],
-    }
-
-
-shortest = read_mode("shortest")
-geographic = read_mode("geographic")
-if shortest["failure_schedule"] != geographic["failure_schedule"]:
-    raise SystemExit("A/B failure schedules differ")
-if shortest["failed_link"] != geographic["failed_link"]:
-    raise SystemExit("deterministic failed links differ")
-manifest = root / "fixed-artifact-sha256.txt"
-comparison = {
-    "fixed_artifact_manifest_sha256": hashlib.sha256(
-        manifest.read_bytes()
-    ).hexdigest(),
-    "shortest": shortest,
-    "geographic": geographic,
-    "geographic_minus_shortest": {
-        "mean_traceroute_hops": (
-            geographic["mean_traceroute_hops"] - shortest["mean_traceroute_hops"]
-        ),
-        "mean_latency_ms": geographic["mean_latency_ms"] - shortest["mean_latency_ms"],
-        "mean_loss_percent": (
-            geographic["mean_loss_percent"] - shortest["mean_loss_percent"]
-        ),
-        "failure_window_update_interruption_seconds": (
-            geographic["failure_window_update_interruption_seconds"]
-            - shortest["failure_window_update_interruption_seconds"]
-        ),
-    },
-}
-(root / "routing_ab_comparison.json").write_text(
-    json.dumps(comparison, indent=2, sort_keys=True) + "\n", encoding="utf-8"
-)
+comparison = compare_routing_runs(sys.argv[1])
+print(json.dumps(comparison, indent=2, sort_keys=True))
 PY
 ```
 
@@ -716,7 +591,7 @@ recovery gates. Transcribe only values produced above:
 | Fixed artifact manifest | PENDING — run on n2-standard-8 | PENDING — run on n2-standard-8 |
 | Mean traceroute hops | PENDING | PENDING |
 | Mean ping latency / loss | PENDING | PENDING |
-| Failure-window update interruption | PENDING | PENDING |
+| Failure/recovery interruption | PENDING | PENDING |
 | Peak process RSS / recovery ping loss | PENDING | PENDING |
 | Epoch-6 acknowledged link / replacement | PENDING | PENDING |
 | Overall acceptance | PENDING — run on n2-standard-8 | PENDING — run on n2-standard-8 |

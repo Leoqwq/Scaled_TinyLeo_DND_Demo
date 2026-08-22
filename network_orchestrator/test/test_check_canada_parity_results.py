@@ -80,11 +80,29 @@ def _valid_bundle(tmp_path: Path) -> tuple[Path, Path, Path]:
             for epoch in EPOCHS
         ],
     )
-    (result_dir / "ping-epoch-0.txt").write_text(
-        "4 packets transmitted, 4 received, 0% packet loss\n", encoding="utf-8"
+    (result_dir / "scenario-metadata.json").write_text(
+        json.dumps(
+            {
+                "routing_mode": "shortest",
+                "source": "GS4",
+                "destination": "GS6",
+                "num_epochs": 12,
+                "failure_epoch": 6,
+                "recovery_observation_epoch": 7,
+            }
+        ),
+        encoding="utf-8",
     )
+    for epoch in (0, 5, 11):
+        (result_dir / f"ping-epoch-{epoch}.txt").write_text(
+            "4 packets transmitted, 4 received, 0% packet loss\n"
+            "rtt min/avg/max/mdev = 1.0/2.0/3.0/0.1 ms\n",
+            encoding="utf-8",
+        )
     (result_dir / "ping-epoch-7.txt").write_text(
-        "4 packets transmitted, 1 received, 75% packet loss\n", encoding="utf-8"
+        "4 packets transmitted, 1 received, 75% packet loss\n"
+        "rtt min/avg/max/mdev = 2.0/3.0/4.0/0.1 ms\n",
+        encoding="utf-8",
     )
     (result_dir / "ping-epoch-6.txt").write_text(
         "4 packets transmitted, 0 received, 100% packet loss\n", encoding="utf-8"
@@ -101,6 +119,12 @@ def _valid_bundle(tmp_path: Path) -> tuple[Path, Path, Path]:
         "traceroute to 10.0.0.9\n1 10.0.0.1 0.1 ms\n2 10.0.0.4 0.2 ms\n",
         encoding="utf-8",
     )
+    for epoch in (0, 11):
+        (result_dir / f"traceroute-epoch-{epoch}.txt").write_text(
+            "traceroute to 10.0.0.9\n1 10.0.0.1 0.1 ms\n"
+            "2 10.0.0.2 0.2 ms\n",
+            encoding="utf-8",
+        )
     (result_dir / "failure-recovery-events.json").write_text(
         json.dumps(
             {
@@ -113,7 +137,18 @@ def _valid_bundle(tmp_path: Path) -> tuple[Path, Path, Path]:
                         "status": "returned",
                         "acknowledgement": {
                             "remote_acknowledgements": [
-                                {"expected_count": 86, "started_count": 86}
+                                {
+                                    "remote_id": 0,
+                                    "expected_count": 86,
+                                    "started_count": 86,
+                                    "agents": [
+                                        {
+                                            "name": f"node-{index}",
+                                            "namespace_pid": 1000 + index,
+                                        }
+                                        for index in range(86)
+                                    ],
+                                }
                             ]
                         },
                     },
@@ -121,6 +156,7 @@ def _valid_bundle(tmp_path: Path) -> tuple[Path, Path, Path]:
                         "epoch": 6,
                         "event": "failure_injection",
                         "status": "returned",
+                        "interruption_seconds": 2.5,
                         "acknowledgement": {
                             "failed_link": ["SH1SAT10", "SH1SAT11"],
                             "removed_satellite": "SH1SAT10",
@@ -179,9 +215,12 @@ def test_complete_bundle_passes_and_writes_stable_summary(tmp_path):
     assert written["metrics"]["peak_process_rss_bytes"] == (2 * 1024**3) + 11
     assert written["metrics"]["ping_loss_percent_by_artifact"] == {
         "ping-epoch-0.txt": 0.0,
+        "ping-epoch-5.txt": 0.0,
         "ping-epoch-6.txt": 100.0,
         "ping-epoch-7.txt": 75.0,
+        "ping-epoch-11.txt": 0.0,
     }
+    assert written["metrics"]["failure_recovery_interruption_seconds"] == 2.5
 
 
 def _low_satellite(paths):
@@ -440,6 +479,139 @@ def test_natural_path_change_without_remote_failure_ack_cannot_pass(tmp_path):
     summary = _run(paths)
 
     assert summary["gates"]["failure_recovery"]["passed"] is False
+
+
+def test_failure_recovery_requires_separately_timed_interruption(tmp_path):
+    paths = _valid_bundle(tmp_path)
+    event_path = paths[0] / "failure-recovery-events.json"
+    events = _load_json(event_path)
+    events["events"][1].pop("interruption_seconds")
+    _save_json(event_path, events)
+
+    summary = _run(paths)
+
+    assert summary["gates"]["failure_recovery"]["passed"] is False
+    assert summary["metrics"]["failure_recovery_interruption_seconds"] is None
+
+
+@pytest.mark.parametrize(
+    "mutation",
+    ["partial", "duplicate_remote"],
+)
+def test_srv6_gate_rejects_partial_or_duplicate_remote_acknowledgements(
+    tmp_path, mutation
+):
+    paths = _valid_bundle(tmp_path)
+    event_path = paths[0] / "failure-recovery-events.json"
+    payload = _load_json(event_path)
+    acknowledgements = payload["events"][0]["acknowledgement"][
+        "remote_acknowledgements"
+    ]
+    if mutation == "partial":
+        acknowledgements[0]["expected_count"] = 85
+        acknowledgements[0]["started_count"] = 85
+        acknowledgements[0]["agents"] = acknowledgements[0]["agents"][:85]
+    else:
+        first = acknowledgements[0]
+        first["expected_count"] = 43
+        first["started_count"] = 43
+        first["agents"] = first["agents"][:43]
+        duplicate = {
+            "remote_id": first["remote_id"],
+            "expected_count": 43,
+            "started_count": 43,
+            "agents": [
+                {"name": f"other-{index}", "namespace_pid": 2000 + index}
+                for index in range(43)
+            ],
+        }
+        acknowledgements.append(duplicate)
+    _save_json(event_path, payload)
+
+    summary = _run(paths)
+
+    assert summary["gates"]["srv6_deployment"]["passed"] is False
+
+
+@pytest.mark.parametrize("case", ["wrong_endpoint", "stray_artifact"])
+def test_ping_gate_is_bound_to_fixed_machine_readable_flow(tmp_path, case):
+    paths = _valid_bundle(tmp_path)
+    if case == "wrong_endpoint":
+        metadata_path = paths[0] / "scenario-metadata.json"
+        metadata = _load_json(metadata_path)
+        metadata["source"] = "GS1"
+        _save_json(metadata_path, metadata)
+    else:
+        (paths[0] / "ping-epoch-99.txt").write_text(
+            "4 packets transmitted, 4 received, 0% packet loss\n",
+            encoding="utf-8",
+        )
+
+    summary = _run(paths)
+
+    assert summary["gates"]["ping_reply"]["passed"] is False
+
+
+def _valid_ab_root(tmp_path: Path) -> Path:
+    ab_root = tmp_path / "formal-ab"
+    ab_root.mkdir()
+    (ab_root / "fixed-artifact-sha256.txt").write_text(
+        "abc  fixed-input\n", encoding="utf-8"
+    )
+    for mode in ("shortest", "geographic"):
+        mode_root = ab_root / mode
+        mode_root.mkdir()
+        paths = _valid_bundle(mode_root)
+        metadata_path = paths[0] / "scenario-metadata.json"
+        metadata = _load_json(metadata_path)
+        metadata["routing_mode"] = mode
+        _save_json(metadata_path, metadata)
+        assert _run(paths)["valid"] is True
+    return ab_root
+
+
+def test_ab_comparison_accepts_epoch6_outage_and_uses_failure_timer(tmp_path):
+    ab_root = _valid_ab_root(tmp_path)
+    for mode in ("shortest", "geographic"):
+        (ab_root / mode / "results" / "traceroute-epoch-6.txt").write_text(
+            "traceroute to 10.0.0.9\n1 * * *\n2 * * *\n",
+            encoding="utf-8",
+        )
+
+    comparison = checker.compare_routing_runs(ab_root)
+
+    assert comparison["shortest"]["per_epoch"]["6"] == {
+        "received": 0,
+        "loss_percent": 100.0,
+        "average_latency_ms": None,
+        "traceroute_hops": None,
+    }
+    assert (
+        comparison["shortest"]["failure_recovery_interruption_seconds"]
+        == 2.5
+    )
+    assert comparison["shortest"]["validated_peak_process_rss_bytes"] > 0
+    assert comparison["shortest"]["validated_recovery_ping_loss_percent"] == 75.0
+    assert _load_json(ab_root / "routing_ab_comparison.json") == comparison
+
+
+@pytest.mark.parametrize("mutation", ["no_recovery_reply", "missing_interruption"])
+def test_ab_comparison_rejects_missing_recovery_evidence(tmp_path, mutation):
+    ab_root = _valid_ab_root(tmp_path)
+    result_dir = ab_root / "geographic" / "results"
+    if mutation == "no_recovery_reply":
+        (result_dir / "ping-epoch-7.txt").write_text(
+            "4 packets transmitted, 0 received, 100% packet loss\n",
+            encoding="utf-8",
+        )
+    else:
+        event_path = result_dir / "failure-recovery-events.json"
+        payload = _load_json(event_path)
+        payload["events"][1].pop("interruption_seconds")
+        _save_json(event_path, payload)
+
+    with pytest.raises(ValueError, match="recovery|interruption"):
+        checker.compare_routing_runs(ab_root)
 
 
 def test_ping_received_count_without_packet_loss_cannot_pass(tmp_path):

@@ -35,6 +35,7 @@ def deploy_agents(
     workdir: str | Path,
     python_executable: str,
     *,
+    remote_id: int,
     process_factory: Callable = subprocess.Popen,
     sleeper: Callable[[float], None] = time.sleep,
     startup_wait_s: float = 1.0,
@@ -45,17 +46,21 @@ def deploy_agents(
         raise ValueError("python_executable must be nonempty")
     if startup_wait_s < 0:
         raise ValueError("startup_wait_s must be nonnegative")
+    if isinstance(remote_id, bool) or not isinstance(remote_id, int) or remote_id < 0:
+        raise ValueError("remote_id must be a nonnegative integer")
     mapping = _pid_map(workdir)
     agent_path = (
-        Path("/resources/controller")
+        workdir
+        / "controller"
         / "geographic_srv6_anycast"
         / "srv6_agent.py"
     )
+    if not agent_path.is_file():
+        raise FileNotFoundError(f"SRv6 agent script does not exist: {agent_path}")
     processes = []
     for name, pid in sorted(mapping.items()):
         command = [
             "nsenter",
-            "-m",
             "-u",
             "-i",
             "-n",
@@ -81,6 +86,7 @@ def deploy_agents(
     if exited:
         raise RuntimeError(f"SRv6 agent exited during startup: {exited}")
     return {
+        "remote_id": remote_id,
         "expected_count": len(mapping),
         "started_count": len(processes),
         "agents": [
@@ -94,6 +100,7 @@ def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--workdir", type=Path, required=True)
     parser.add_argument("--python-executable", required=True)
+    parser.add_argument("--remote-id", type=int, required=True)
     parser.add_argument("--startup-wait-s", type=float, default=1.0)
     return parser
 
@@ -103,6 +110,7 @@ def main(argv: list[str] | None = None) -> int:
     acknowledgement = deploy_agents(
         args.workdir,
         args.python_executable,
+        remote_id=args.remote_id,
         startup_wait_s=args.startup_wait_s,
     )
     print(ACK_MARKER + json.dumps(acknowledgement, sort_keys=True))

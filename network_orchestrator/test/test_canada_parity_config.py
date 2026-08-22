@@ -35,6 +35,7 @@ sys.modules.setdefault(
 )
 
 import sn_orchestrator_mpc
+from failure_recovery_mpc import MPCFaultHandler
 from southbound import sn_utils
 from southbound import sn_remote
 from southbound.sn_controller import RemoteController, RemoteMachine
@@ -774,6 +775,82 @@ class ControllerPlumbingTests(unittest.TestCase):
 
 
 class RuntimeAcknowledgementTests(unittest.TestCase):
+    def test_fault_handler_uses_explicit_artifacts_and_source_epoch(self):
+        with tempfile.TemporaryDirectory() as tempdir:
+            root = Path(tempdir)
+            topology = root / "runtime topology"
+            (topology / "inter_topology").mkdir(parents=True)
+            (topology / "intra_topology").mkdir()
+            np.save(
+                topology / "inter_topology" / "1.npy",
+                np.asarray([], dtype=object),
+                allow_pickle=True,
+            )
+            np.save(
+                topology / "intra_topology" / "1.npy",
+                {},
+                allow_pickle=True,
+            )
+            satellite_file = root / "custom satellites.npy"
+            satellites = np.empty((1, 5), dtype=object)
+            satellites[0] = [
+                [573.0, 1.0, 0.0],
+                [0],
+                None,
+                [[0.0, 0.0], [1.0, 1.0], [2.0, 2.0], [3.0, 3.0]],
+                1,
+            ]
+            np.save(satellite_file, satellites, allow_pickle=True)
+            grid_file = root / "custom grid.npy"
+            np.save(grid_file, {3: {23: [0]}}, allow_pickle=True)
+
+            handler = MPCFaultHandler(
+                topology_dir=topology,
+                satellite_file=satellite_file,
+                grid_satellites_file=grid_file,
+                runtime_epoch=1,
+                source_epoch=3,
+            )
+
+        self.assertEqual(handler.timestamp, 1)
+        self.assertEqual(handler.source_epoch, 3)
+        self.assertEqual(handler.satellite_locations[1][0], [3.0, 3.0])
+        self.assertEqual(handler.grid_satellites, {23: [0]})
+
+    def test_fault_handler_source_has_no_legacy_artifact_defaults(self):
+        source = (PROJECT_ROOT / "failure_recovery_mpc.py").read_text(
+            encoding="utf-8"
+        )
+
+        self.assertNotIn("eval1_573_jinyao_24k_half.npy", source)
+        self.assertNotIn("new_grid_satellites.npy", source)
+        self.assertNotIn("test/tinyleo-Arbitrary-LeastDelay", source)
+
+    def test_controller_passes_explicit_failure_artifact_mapping(self):
+        controller = RemoteController.__new__(RemoteController)
+        controller.local_dir = "/tmp/runtime topology"
+        controller.satellite_file = "/tmp/custom satellites.npy"
+        controller.grid_satellites_file = "/tmp/custom grid.npy"
+        controller.start_epoch = 4
+        controller.ts = 6
+
+        with mock.patch(
+            "southbound.sn_controller.MPCFaultHandler"
+        ) as handler_type:
+            handler_type.return_value.handle_link_failure.side_effect = RuntimeError(
+                "stop after constructor"
+            )
+            with self.assertRaisesRegex(RuntimeError, "stop after constructor"):
+                controller.handle_link_failure("SH1SAT1", "SH1SAT2")
+
+        handler_type.assert_called_once_with(
+            topology_dir=controller.local_dir,
+            satellite_file=controller.satellite_file,
+            grid_satellites_file=controller.grid_satellites_file,
+            runtime_epoch=6,
+            source_epoch=10,
+        )
+
     def test_container_creation_passes_dynamic_controller_mount_source(self):
         calls = []
 
@@ -863,10 +940,12 @@ class RuntimeAcknowledgementTests(unittest.TestCase):
                 0,
                 "SH1SAT1",
                 "SH1SAT2",
+                remote_id=7,
             )
 
         self.assertEqual(loaded, ["SH1SAT1", "SH1SAT2"])
-        self.assertIs(actual, acknowledgement)
+        self.assertEqual(actual["remote_id"], 7)
+        self.assertNotIn("remote_id", acknowledgement)
 
     def test_remote_python_is_configured_and_reaches_remote_machine(self):
         with tempfile.TemporaryDirectory() as tempdir:
@@ -940,6 +1019,7 @@ class RuntimeAcknowledgementTests(unittest.TestCase):
                         "removed_satellite": "SH1SAT1",
                         "replacement_satellite": "SH1SAT9",
                         "updated_satellites": ["SH1SAT1", "SH1SAT9"],
+                        "remote_id": 0,
                     }
                 )
             return ""
@@ -956,6 +1036,31 @@ class RuntimeAcknowledgementTests(unittest.TestCase):
         self.assertIn("'/root/experiment with spaces/sn_remote.py'", commands[0])
         self.assertIn("127.0.0.1:50051", commands[1])
         self.assertEqual(acknowledgement["remote_id"], 0)
+
+    def test_remote_machine_rejects_fault_ack_without_remote_identity(self):
+        machine = RemoteMachine.__new__(RemoteMachine)
+        machine.id = 4
+        machine.dir = "/tmp/work"
+        machine.remote_python = "/tmp/venv/bin/python"
+        machine.failure_controller_endpoint = "127.0.0.1:50051"
+        machine.ssh = object()
+
+        with mock.patch(
+            "southbound.sn_controller.sn_remote_wait_output",
+            return_value=(
+                "TINYLEO_FAILURE_ACK="
+                + json.dumps(
+                    {
+                        "failed_link": ["SH1SAT1", "SH1SAT2"],
+                        "removed_satellite": "SH1SAT1",
+                        "replacement_satellite": "SH1SAT9",
+                        "updated_satellites": ["SH1SAT1", "SH1SAT9"],
+                    }
+                )
+            ),
+        ):
+            with self.assertRaisesRegex(RuntimeError, "different remote"):
+                machine.fault_test(6, 200, 0, 96, 0, ("SH1SAT1", "SH1SAT2"))
 
     def test_fault_target_is_deterministic_and_worker_ack_propagates(self):
         calls = []
@@ -1105,6 +1210,14 @@ class RuntimeAcknowledgementTests(unittest.TestCase):
             (root / "container_pid.txt").write_text(
                 "SH1SAT1:101 NA GS1:102\n", encoding="utf-8"
             )
+            agent_path = (
+                root
+                / "controller"
+                / "geographic_srv6_anycast"
+                / "srv6_agent.py"
+            )
+            agent_path.parent.mkdir(parents=True)
+            agent_path.write_text("# agent\n", encoding="utf-8")
             commands = []
 
             class Process:
@@ -1117,20 +1230,23 @@ class RuntimeAcknowledgementTests(unittest.TestCase):
             ack = module.deploy_agents(
                 root,
                 "/tmp/runtime/bin/python",
+                remote_id=3,
                 process_factory=Process,
                 sleeper=lambda _seconds: None,
             )
 
         self.assertEqual(ack["expected_count"], 2)
         self.assertEqual(ack["started_count"], 2)
+        self.assertEqual(ack["remote_id"], 3)
         self.assertTrue(all("/tmp/runtime/bin/python" in command for command in commands))
         self.assertTrue(
             all(
-                "/resources/controller/geographic_srv6_anycast/srv6_agent.py"
+                str(agent_path)
                 in command
                 for command in commands
             )
         )
+        self.assertTrue(all("-m" not in command for command in commands))
         self.assertTrue(all("/root/tinyleo-Arbitrary-LeastDelay" not in " ".join(command) for command in commands))
 
         class ExitedProcess:
@@ -1143,11 +1259,32 @@ class RuntimeAcknowledgementTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tempdir:
             root = Path(tempdir)
             (root / "container_pid.txt").write_text("SH1SAT1:101\n", encoding="utf-8")
+            agent_path = (
+                root
+                / "controller"
+                / "geographic_srv6_anycast"
+                / "srv6_agent.py"
+            )
+            agent_path.parent.mkdir(parents=True)
+            agent_path.write_text("# agent\n", encoding="utf-8")
             with self.assertRaisesRegex(RuntimeError, "exited during startup"):
                 module.deploy_agents(
                     root,
                     "/tmp/runtime/bin/python",
+                    remote_id=0,
                     process_factory=ExitedProcess,
+                    sleeper=lambda _seconds: None,
+                )
+
+        with tempfile.TemporaryDirectory() as tempdir:
+            root = Path(tempdir)
+            (root / "container_pid.txt").write_text("SH1SAT1:101\n", encoding="utf-8")
+            with self.assertRaisesRegex(FileNotFoundError, "agent script"):
+                module.deploy_agents(
+                    root,
+                    "/tmp/runtime/bin/python",
+                    remote_id=0,
+                    process_factory=Process,
                     sleeper=lambda _seconds: None,
                 )
 
