@@ -138,6 +138,35 @@ faster network topology update)
    <div align=center>
    <img src="docs/container.png" width="800px" />
    </div>
-   
+
+## Offline topology artifact validation
+
+Validate MPC topology files before starting containers, network namespaces, or
+SRv6 agents:
+
+```bash
+python test/validate_topology_artifacts.py \
+  --satellite-file data/canada_parity_satellite_data.npy \
+  --grid-satellites-file data/canada_parity_grid_satellites.npy \
+  --traffic-matrix-file data/canada_parity_traffic_matrix.npy \
+  --block-positions-file data/topo_data/block_positions.json \
+  --topology-dir result/canada_parity \
+  --output-dir result/canada_parity_validation \
+  --expected-epochs 12 \
+  --active-grids 12,13,14,23,24,25 \
+  --min-satellites 64 \
+  --max-satellites 128 \
+  --min-edge-disjoint-paths 2 \
+  --min-path-epoch-ratio 0.8 \
+  --min-topology-changes 3 \
+  --min-gateway-handovers 2
+```
+
+The command is read-only with respect to topology inputs. It writes
+`validation_report.json`, `epoch_metrics.csv`, `topology_churn.csv`, and
+`validation_summary.txt` to the selected output directory, and exits non-zero
+when a schema, cross-file consistency, connectivity, path-diversity, topology
+change, or handover gate fails.
+
 ## Reference
 [1] Yuanjie Li, Yimei Chen, Jiabo Yang, Jinyao Zhang, Bowen Sun, Lixin Liu, Hewu Li, Jianping Wu, Zeqi Lai, Qian Wu, Jun Liu, "Small-scale LEO Satellite Networking for Global-scale Demands," ACM Special Interest Group on Data Communication (SIGCOMM), 2025
