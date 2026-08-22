@@ -104,14 +104,41 @@ def sn_load_file(path):
     This function reads a JSON configuration file, extracts relevant fields, 
     and sets up command-line arguments with default values from the file.
     """
-    f = open(path, 'r', encoding='utf8')
-    table = json.load(f)
+    with open(path, 'r', encoding='utf8') as f:
+        table = json.load(f)
+
+    config_dir = os.path.abspath(os.path.dirname(path))
+    topo_dir = table['topo_dir']
+
+    def artifact_path(config_key, legacy_filename):
+        if config_key not in table:
+            return os.path.join(topo_dir, legacy_filename)
+        configured_path = os.path.expanduser(table[config_key])
+        if os.path.isabs(configured_path):
+            return configured_path
+        return os.path.abspath(os.path.join(config_dir, configured_path))
+
+    num_epochs = table.get('num_epochs', table.get('Duration (s)', 0))
+    start_epoch = table.get('start_epoch', 0)
+    topology_update_interval_s = float(table.get('topology_update_interval_s', 20.0))
+    execution_mode = table.get('execution_mode', 'remote')
+    enable_failure_recovery = table.get('enable_failure_recovery', True)
+    num_processes = table.get('num_processes', 8)
+
+    if start_epoch < 0:
+        raise ValueError('start_epoch must be nonnegative')
+    if num_epochs < 0:
+        raise ValueError('num_epochs must be nonnegative')
+    if num_processes < 1:
+        raise ValueError('num_processes must be positive')
+    if table.get('Name') == 'tinyleo_canada_parity' and num_processes > 6:
+        raise ValueError('Canada parity profile supports at most 6 processes')
     parser = argparse.ArgumentParser(description='manual to this script')
     parser.add_argument('--cons_name', type=str, default=table['Name'])
     parser.add_argument('--link_style', type=str, default=table['Satellite link'])
     parser.add_argument('--link_policy', type=str, default=table['Link policy'])
     # link delay updating granularity
-    parser.add_argument('--duration', type=int, default=(table['Duration (s)'] if 'Duration (s)' in table else 0))
+    parser.add_argument('--duration', type=int, default=num_epochs)
     parser.add_argument('--sat_bandwidth',
                         type=int,
                         default=table['satellite link bandwidth ("X" Gbps)'])
@@ -132,12 +159,44 @@ def sn_load_file(path):
                         default=table['antenna elevation angle'])
     parser.add_argument('--topo_dir',
                         type=str,
-                        default=table['topo_dir'])
+                        default=topo_dir)
     sn_args = parser.parse_args()
     sn_args.__setattr__('machine_lst', table['Machines'])
+    sn_args.__setattr__('start_epoch', start_epoch)
+    sn_args.__setattr__('num_epochs', sn_args.duration)
+    sn_args.__setattr__('topology_update_interval_s', topology_update_interval_s)
+    sn_args.__setattr__('execution_mode', execution_mode)
+    sn_args.__setattr__('enable_failure_recovery', enable_failure_recovery)
+    sn_args.__setattr__('num_processes', num_processes)
+    sn_args.__setattr__(
+        'satellite_file',
+        artifact_path('satellite_file', 'eval1_573_jinyao_24k_half.npy')
+    )
+    sn_args.__setattr__(
+        'traffic_matrix_file',
+        artifact_path('traffic_matrix_file', 'traffic_matrix_max_24k_new.npy')
+    )
+    sn_args.__setattr__(
+        'grid_satellites_file',
+        artifact_path('grid_satellites_file', 'new_grid_satellites.npy')
+    )
+    sn_args.__setattr__(
+        'block_positions_file',
+        artifact_path('block_positions_file', 'block_positions.json')
+    )
     return sn_args
 
-def sn_connect_remote(host, port, username, password):
+def remaining_topology_interval(
+    topology_update_interval_s, started_at_monotonic, now_monotonic
+):
+    """Return the nonnegative wall-clock time left in an update interval."""
+    remaining = topology_update_interval_s - (
+        now_monotonic - started_at_monotonic
+    )
+    return max(0.0, remaining)
+
+
+def sn_connect_remote(host, port, username, password=None, key_filename=None):
     """
     Establishes an SSH connection to a remote server.
 
@@ -145,7 +204,8 @@ def sn_connect_remote(host, port, username, password):
         host (str): Hostname or IP address of the remote server.
         port (int): Port number for the SSH connection.
         username (str): Username for authentication.
-        password (str): Password for authentication.
+        password (str, optional): Password for legacy authentication.
+        key_filename (str, optional): Private key path for key-based authentication.
 
     Returns:
         tuple: A tuple containing the SSH client and SFTP client objects.
@@ -154,7 +214,16 @@ def sn_connect_remote(host, port, username, password):
     """
     remote_ssh = paramiko.SSHClient()
     remote_ssh.set_missing_host_key_policy(paramiko.AutoAddPolicy())
-    remote_ssh.connect(hostname=host, port=port, username=username, password=password)
+    connect_args = {
+        'hostname': host,
+        'port': port,
+        'username': username,
+    }
+    if key_filename is not None:
+        connect_args['key_filename'] = os.path.expanduser(key_filename)
+    if password is not None:
+        connect_args['password'] = password
+    remote_ssh.connect(**connect_args)
     return remote_ssh, remote_ssh.open_sftp()
 
 def sn_remote_cmd(remote_ssh, cmd):

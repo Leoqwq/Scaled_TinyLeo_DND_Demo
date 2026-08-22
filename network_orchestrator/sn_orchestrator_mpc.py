@@ -846,12 +846,91 @@ def process_timestamp_incremental(
     return final_topology
 
 #--------------------------------------------------
-# Model Predictive Controller Main Functions 
+# Model Predictive Controller Main Functions
 #--------------------------------------------------
 
-def generate_topology_for_timestamp(timestamp, satellite_file, block_positions_file, 
-                                   traffic_matrix_file, grid_satellites_file, 
-                                   output_dir, num_processes):
+def _load_epoch_slice_data(
+    satellite_file,
+    traffic_matrix_file,
+    grid_satellites_file,
+    start_epoch,
+    num_epochs=None,
+):
+    """Load a bounded source slice and renumber its epochs from zero."""
+    if start_epoch < 0:
+        raise ValueError("start_epoch must be nonnegative")
+    if num_epochs is not None and num_epochs < 0:
+        raise ValueError("num_epochs must be nonnegative")
+
+    supply_data = np.load(satellite_file, allow_pickle=True)
+    if not len(supply_data):
+        raise ValueError("satellite data must contain at least one satellite")
+
+    position_counts = []
+    for data in supply_data:
+        _, _, _, sat_locations, _ = data
+        position_counts.append(len(sat_locations))
+    available_epochs = min(position_counts)
+    if num_epochs is None:
+        num_epochs = available_epochs - start_epoch
+    end_epoch = start_epoch + num_epochs
+    if end_epoch > available_epochs:
+        raise ValueError(
+            f"source epoch slice {start_epoch}:{end_epoch} exceeds "
+            f"{available_epochs} available satellite epochs"
+        )
+
+    grid_data = np.load(grid_satellites_file, allow_pickle=True).item()
+    missing_grid_epochs = [
+        source_epoch
+        for source_epoch in range(start_epoch, end_epoch)
+        if source_epoch not in grid_data
+    ]
+    if missing_grid_epochs:
+        raise ValueError(
+            "source epoch slice is missing grid mappings for epochs "
+            f"{missing_grid_epochs}"
+        )
+
+    traffic_matrix = np.load(traffic_matrix_file)
+    traffic_matrices = {
+        local_epoch: traffic_matrix.copy()
+        for local_epoch in range(num_epochs)
+    }
+    grid_satellites = {
+        local_epoch: grid_data[start_epoch + local_epoch]
+        for local_epoch in range(num_epochs)
+    }
+    satellite_locations = {
+        local_epoch: {} for local_epoch in range(num_epochs)
+    }
+    satellite_params = {}
+    for satellite_id, data in enumerate(supply_data):
+        param, random_numbers, _, sat_locations, _ = data
+        satellite_params[satellite_id] = {
+            'height': param[0],
+            'inclination': param[1],
+            'alpha0': param[2],
+            'initial_slot': random_numbers,
+        }
+        for local_epoch in range(num_epochs):
+            satellite_locations[local_epoch][satellite_id] = (
+                sat_locations[start_epoch + local_epoch]
+            )
+
+    return (
+        supply_data,
+        traffic_matrices,
+        grid_satellites,
+        satellite_locations,
+        satellite_params,
+        num_epochs,
+    )
+
+def generate_topology_for_timestamp(timestamp, satellite_file, block_positions_file,
+                                   traffic_matrix_file, grid_satellites_file,
+                                   output_dir, num_processes, start_epoch=0,
+                                   num_epochs=None):
     """
     Main MPC function: Generate topology for a specified timestamp.
     
@@ -873,6 +952,25 @@ def generate_topology_for_timestamp(timestamp, satellite_file, block_positions_f
     """
     global GLOBAL_INTER_DOMAIN_TOPOLOGY_CACHE, GLOBAL_INTRA_DOMAIN_TOPOLOGY_CACHE
     
+    (
+        supply_data,
+        all_traffic_matrices,
+        all_grid_satellites,
+        all_satellite_locations,
+        satellite_params,
+        selected_epochs,
+    ) = _load_epoch_slice_data(
+        satellite_file,
+        traffic_matrix_file,
+        grid_satellites_file,
+        start_epoch,
+        num_epochs,
+    )
+    if timestamp < 0 or timestamp >= selected_epochs:
+        raise ValueError(
+            f"local timestamp {timestamp} is outside 0..{selected_epochs - 1}"
+        )
+
     # Record start time
     timestamp_start = time.time()
     
@@ -891,20 +989,10 @@ def generate_topology_for_timestamp(timestamp, satellite_file, block_positions_f
             
             # Data exists, just save and return
             # Load necessary data
-            supply_data = np.load(satellite_file, allow_pickle=True)
             num_satellites = len(supply_data)
-            
-            satellite_params = {}
-            satellite_locations = {timestamp: {}}
-            for idx, data in enumerate(supply_data):
-                param, random_numbers, _, sat_location, _ = data
-                satellite_params[idx] = {
-                    'height': param[0],
-                    'inclination': param[1],
-                    'alpha0': param[2],
-                    'initial_slot': random_numbers
-                }
-                satellite_locations[timestamp][idx] = sat_location[timestamp]
+            satellite_locations = {
+                timestamp: all_satellite_locations[timestamp]
+            }
             
             with open(block_positions_file, 'r') as f:
                 block_positions = json.load(f)
@@ -941,39 +1029,30 @@ def generate_topology_for_timestamp(timestamp, satellite_file, block_positions_f
                     traffic_matrix_file=traffic_matrix_file,
                     grid_satellites_file=grid_satellites_file,
                     output_dir=output_dir,
-                    num_processes=num_processes
+                    num_processes=num_processes,
+                    start_epoch=start_epoch,
+                    num_epochs=selected_epochs,
                 )
         
         # Load necessary data
         data_access_start = time.time()
         
         # Load satellite parameters and positions
-        supply_data = np.load(satellite_file, allow_pickle=True)
         num_satellites = len(supply_data)
-        
-        satellite_params = {}
-        satellite_locations = {timestamp: {}}
-        for idx, data in enumerate(supply_data):
-            param, random_numbers, _, sat_location, _ = data
-            satellite_params[idx] = {
-                'height': param[0],
-                'inclination': param[1],
-                'alpha0': param[2],
-                'initial_slot': random_numbers
-            }
-            satellite_locations[timestamp][idx] = sat_location[timestamp]
+        satellite_locations = {
+            timestamp: all_satellite_locations[timestamp]
+        }
         
         # Load grid position information
         with open(block_positions_file, 'r') as f:
             block_positions = json.load(f)
         
         # Load traffic matrix
-        traffic_matrix = np.load(traffic_matrix_file)
+        traffic_matrix = all_traffic_matrices[timestamp]
             
         # Load grid coverage data
-        grid_data = np.load(grid_satellites_file, allow_pickle=True).item()
         grid_satellites = {timestamp: {}}
-        for grid_id, satellites in grid_data[timestamp].items():
+        for grid_id, satellites in all_grid_satellites[timestamp].items():
             if isinstance(satellites, (list, np.ndarray)):
                 grid_satellites[timestamp][grid_id] = list(satellites)
             else:
@@ -1070,7 +1149,7 @@ def generate_topology_for_timestamp(timestamp, satellite_file, block_positions_f
             print()
 
 def predict_all_topologies(duration, satellite_file, traffic_matrix_file, grid_satellites_file,
-                          result_output_dir=None, num_processes=8):
+                          result_output_dir=None, num_processes=8, start_epoch=0):
     """
     Predict topologies for all timestamps for the entire simulation time horizon.
     
@@ -1099,29 +1178,31 @@ def predict_all_topologies(duration, satellite_file, traffic_matrix_file, grid_s
         'total_topology_time': []
     }
     
-    # Create temp process pool
+    (
+        supply_data,
+        all_traffic_matrices,
+        all_grid_satellites,
+        all_satellite_locations,
+        satellite_params,
+        selected_epochs,
+    ) = _load_epoch_slice_data(
+        satellite_file,
+        traffic_matrix_file,
+        grid_satellites_file,
+        start_epoch,
+        duration,
+    )
+
+    # Create temp process pool only after all source bounds have been validated.
     temp_pool = Pool(processes=num_processes)
     # print(f"Created temp process pool using {num_processes} processes")
     
     try:
         # 2. Get total timestamps and number of satellites
-        supply_data = np.load(satellite_file, allow_pickle=True)
-        _, _, _, sat_location0, _ = supply_data[0]
-        total_timestamps = len(sat_location0)
         num_satellites = len(supply_data)
-        
-        print(f"Total timestamps: {total_timestamps}")
+
+        print(f"Total timestamps: {selected_epochs}")
         print(f"Number of satellites: {num_satellites}")
-        
-        # Load all timestamp data at once outside the loop
-        print("\nLoading all timestamp data at once...")
-        all_traffic_matrices, all_grid_satellites, all_satellite_locations, satellite_params = \
-            load_all_timestamps_data(
-                traffic_matrix_file,
-                satellite_file,
-                grid_satellites_file,
-                total_timestamps
-            )
         
         # Store all results
         all_inter_topology = {}
@@ -1132,7 +1213,7 @@ def predict_all_topologies(duration, satellite_file, traffic_matrix_file, grid_s
         print("\nProcessing all timestamps...")
         overall_start_time = time.time()
         
-        for timestamp in tqdm(range(total_timestamps)[:duration], desc="Processing timestamps"):
+        for timestamp in tqdm(range(selected_epochs), desc="Processing timestamps"):
             # Record timestamp start time
             timestamp_start = time.time()
             
@@ -1220,7 +1301,8 @@ def predict_all_topologies(duration, satellite_file, traffic_matrix_file, grid_s
             supply_data,
             all_inter_topology,
             all_intra_topology,
-            result_output_dir
+            result_output_dir,
+            start_epoch=start_epoch,
         )
         
     finally:

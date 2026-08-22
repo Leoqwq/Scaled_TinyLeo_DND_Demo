@@ -1,0 +1,31 @@
+{
+    "Name": "tinyleo_canada_parity",
+    "Satellite link": "Arbitrary",
+    "Duration (s)": 12,
+    "start_epoch": 0,
+    "num_epochs": 12,
+    "topology_update_interval_s": 20,
+    "execution_mode": "local",
+    "enable_failure_recovery": true,
+    "num_processes": 6,
+    "satellite_file": "../data/canada_parity/canada_parity_satellite_data.npy",
+    "traffic_matrix_file": "../data/canada_parity/canada_parity_traffic_matrix.npy",
+    "grid_satellites_file": "../data/canada_parity/canada_parity_grid_satellites.npy",
+    "block_positions_file": "../data/canada_parity/block_positions.json",
+    "satellite link bandwidth (\"X\" Gbps)": 200,
+    "sat-ground bandwidth (\"X\" Gbps)": 96,
+    "satellite link loss (\"X\"% )": 0,
+    "sat-ground loss (\"X\"% )": 0,
+    "antenna number": 1,
+    "antenna elevation angle": 25,
+    "Link policy": "LeastDelay",
+    "topo_dir": "../data/canada_parity/",
+    "Machines": [
+        {
+            "IP": "127.0.0.1",
+            "port": 22,
+            "username": "root",
+            "key_filename": "~/.ssh/id_ed25519"
+        }
+    ]
+}

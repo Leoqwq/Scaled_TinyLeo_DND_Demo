@@ -502,7 +502,13 @@ def save_timestamp_topology(inter_topology, intra_topology, block_positions, sat
     # Save satellite topology
     save_isl_positions(inter_topology, intra_topology, sat_locations, sat_params, timestamp, num_satellites, output_dir)
 
-def create_all_isl_position_json(supply_data, inter_topology, intra_topology, output_dir):
+def create_all_isl_position_json(
+    supply_data,
+    inter_topology,
+    intra_topology,
+    output_dir,
+    start_epoch=0,
+):
     """
     Create consolidated ISL position JSON file for all timestamps.
     
@@ -548,7 +554,7 @@ def create_all_isl_position_json(supply_data, inter_topology, intra_topology, ou
         
         # Add satellite positions (in satellite ID order)
         for sat_id in range(num_satellites):
-            lon, lat = satellite_locations[t][sat_id]
+            lon, lat = satellite_locations[start_epoch + t][sat_id]
             height = satellite_params[sat_id]['height']
             
             # Convert radians to degrees

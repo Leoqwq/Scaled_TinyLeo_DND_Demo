@@ -52,7 +52,14 @@ class RemoteController():
         data_plane_dir (str): Directory for data plane geographic srv6 anycast.
     """
 
-    def __init__(self,configuration_file_path,GS_lat_long,GS_cell):
+    def __init__(
+        self,
+        configuration_file_path,
+        GS_lat_long,
+        GS_cell,
+        topology_predictor=None,
+        topology_generator=None,
+    ):
         """
         Initializes the RemoteController instance with the given arguments.
 
@@ -65,7 +72,17 @@ class RemoteController():
         self.gs_lat_long = GS_lat_long
         self.link_style = sn_args.link_style
         self.link_policy = sn_args.link_policy
-        self.duration = sn_args.duration
+        self.start_epoch = sn_args.start_epoch
+        self.num_epochs = sn_args.num_epochs
+        self.duration = self.num_epochs
+        self.topology_update_interval_s = sn_args.topology_update_interval_s
+        self.execution_mode = sn_args.execution_mode
+        self.enable_failure_recovery = sn_args.enable_failure_recovery
+        self.num_processes = sn_args.num_processes
+        self.satellite_file = sn_args.satellite_file
+        self.traffic_matrix_file = sn_args.traffic_matrix_file
+        self.grid_satellites_file = sn_args.grid_satellites_file
+        self.block_positions_file = sn_args.block_positions_file
         self.sat_bandwidth = sn_args.sat_bandwidth
         self.sat_ground_bandwidth = sn_args.sat_ground_bandwidth
         self.sat_loss = sn_args.sat_loss
@@ -79,7 +96,33 @@ class RemoteController():
         self.local_dir = os.path.abspath(os.path.join(self.configuration_dir,'..', self.experiment_name))
         self.machine_lst = sn_args.machine_lst
         self.topo_dir = sn_args.topo_dir
+        self._topology_predictor = topology_predictor or predict_all_topologies
+        self._topology_generator = topology_generator or generate_topology_for_timestamp
         self.data_plane_dir = os.path.abspath(os.path.join(os.path.dirname(__file__), '..','geographic_srv6_anycast'))
+
+    def _predict_topologies(self):
+        return self._topology_predictor(
+            duration=self.num_epochs,
+            satellite_file=self.satellite_file,
+            traffic_matrix_file=self.traffic_matrix_file,
+            grid_satellites_file=self.grid_satellites_file,
+            result_output_dir=self.local_dir,
+            num_processes=self.num_processes,
+            start_epoch=self.start_epoch,
+        )
+
+    def _generate_topology_for_timestamp(self, timestamp):
+        return self._topology_generator(
+            timestamp=timestamp,
+            satellite_file=self.satellite_file,
+            block_positions_file=self.block_positions_file,
+            traffic_matrix_file=self.traffic_matrix_file,
+            grid_satellites_file=self.grid_satellites_file,
+            output_dir=self.local_dir,
+            num_processes=self.num_processes,
+            start_epoch=self.start_epoch,
+            num_epochs=self.num_epochs,
+        )
     
     def init_remote_machine(self):
         """
@@ -87,14 +130,7 @@ class RemoteController():
         """
         # Predict and generate topology data for the simulation
         print('Predict topo data')
-        predict_all_topologies(
-            duration=self.duration,
-            satellite_file=f"{self.topo_dir}/eval1_573_jinyao_24k_half.npy",
-            traffic_matrix_file=f"{self.topo_dir}/traffic_matrix_max_24k_new.npy",
-            grid_satellites_file=f"{self.topo_dir}/new_grid_satellites.npy",
-            result_output_dir=self.local_dir,
-            num_processes=8
-        )
+        self._predict_topologies()
         # Initialize files for containers and topology
         self._init_tinyleo_topology()
         for shell_id, shell in enumerate(self.shell_lst):
@@ -224,15 +260,7 @@ class RemoteController():
             ts (int): The timestamp for which the topology should be updated.
         """
         self.ts = ts
-        generate_topology_for_timestamp(
-            timestamp=self.ts,
-            satellite_file=f"{self.topo_dir}/eval1_573_jinyao_24k_half.npy",
-            block_positions_file=f"{self.topo_dir}/block_positions.json",
-            traffic_matrix_file=f"{self.topo_dir}/traffic_matrix_max_24k_new.npy",
-            grid_satellites_file=f"{self.topo_dir}/new_grid_satellites.npy",
-            output_dir=self.local_dir,
-            num_processes=8
-        )
+        self._generate_topology_for_timestamp(self.ts)
 
         self.shell_lst = []
         topo_path = os.path.join(self.local_dir,'all_isl_positions',f"{ts}.json")
@@ -399,15 +427,16 @@ class RemoteController():
         remote_lst = []
         for i, remote in enumerate(machine_lst):
             remote_lst.append(RemoteMachine(
-                i,
-                remote['IP'],
-                remote['port'],
-                remote['username'],
-                remote['password'],
-                assigned_shell_lst[i],
-                self.experiment_name,
-                self.local_dir,
-                self.gs_dirname if i in gs_mid_dict.values() else None
+                id=i,
+                host=remote['IP'],
+                port=remote['port'],
+                username=remote['username'],
+                password=remote.get('password'),
+                shell_lst=assigned_shell_lst[i],
+                experiment_name=self.experiment_name,
+                local_dir=self.local_dir,
+                gs_dirname=self.gs_dirname if i in gs_mid_dict.values() else None,
+                key_filename=remote.get('key_filename'),
                 )
             )
         return remote_lst, sat_mid_dict, gs_mid_dict
@@ -570,8 +599,9 @@ class RemoteMachine:
         dir (str): Remote directory for storing simulation files.
     """
 
-    def __init__(self, id, host, port, username, password, 
-                 shell_lst, experiment_name, local_dir, gs_dirname):
+    def __init__(self, id, host, port, username, password=None,
+                 shell_lst=None, experiment_name=None, local_dir=None,
+                 gs_dirname=None, key_filename=None):
         """
         Initializes the RemoteMachine instance and sets up the remote environment.
 
@@ -595,6 +625,7 @@ class RemoteMachine:
             port = port,
             username = username,
             password = password,
+            key_filename = key_filename,
         )
         sn_remote_cmd(self.ssh, 'mkdir ~/' + experiment_name)
         self.dir = sn_remote_cmd(self.ssh, 'echo ~/' + experiment_name)

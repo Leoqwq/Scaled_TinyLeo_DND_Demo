@@ -55,7 +55,8 @@ sn.create_nodes()
 # Create links (e.g., inter-satellite and ground station links) in the simulation
 sn.create_links()
 # Create a link failure server to handle link failures
-sn.start_link_faliure_server()
+if sn.enable_failure_recovery:
+    sn.start_link_faliure_server()
 # Update the simulation with the initial topology
 sn.update_tinyleo_topology(0)
 # Deploy the SRv6 agent in satellite and ground stations
@@ -63,18 +64,18 @@ sn.deploy_tinyleo_srv6_agent()
 # Wait for the SRv6 agent to initialize
 time.sleep(10)
 
-# Define the time interval for topology updates
-update_time = 20
+# Define the wall-clock interval for topology updates
+update_time = sn.topology_update_interval_s
 
 # Loop through each timestamp in the simulation duration
-for timestamp in range(0, sn.duration):
-    start_time = time.time()
+for timestamp in range(0, sn.num_epochs):
+    start_time = time.monotonic()
     if timestamp != 0:
         sn.update_tinyleo_topology(timestamp)
     if TEST:
         time.sleep(2)
         sn.set_traceroute("GS1", "GS2",f"ts{timestamp}")
-    if timestamp == 0:
+    if timestamp == 0 and sn.enable_failure_recovery:
         if TEST:
             time.sleep(1)
             sn.set_traceroute("GS1", "GS2",f"ts{timestamp}_before_link_failure")
@@ -84,11 +85,19 @@ for timestamp in range(0, sn.duration):
             sn.tinyleo_fault_test()
             time.sleep(2)
             sn.set_traceroute("GS1", "GS2",f"ts{timestamp}_after_link_failure")
-            time.sleep(update_time-0.5 - (time.time() - start_time))
-            if timestamp != sn.duration - 1:
+            time.sleep(
+                remaining_topology_interval(
+                    update_time - 0.5,
+                    start_time,
+                    time.monotonic(),
+                )
+            )
+            if timestamp != sn.num_epochs - 1:
                 sn.set_ping("GS1", "GS2", f"ts{timestamp}-{timestamp+1}_topo_change")
                 sn.set_iperf("GS1", "GS2", f"ts{timestamp}-{timestamp+1}_topo_change")
-    time.sleep(update_time - (time.time() - start_time))
+    time.sleep(
+        remaining_topology_interval(update_time, start_time, time.monotonic())
+    )
 
 if input('clear environment?[y/n]').strip().lower()[:1] == 'y':
     sn.clean()
