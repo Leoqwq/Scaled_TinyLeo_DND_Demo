@@ -10,6 +10,13 @@ from tqdm import tqdm
 
 from utils import *
 
+
+def coverage_gain(coverage_row, residual):
+    """Return the legacy MP dot-product gain for one coverage row."""
+    dot = coverage_row @ residual
+    return float(np.asarray(dot).reshape(-1)[0])
+
+
 class Synthesizer():
     '''
     This class implements a greedy algorithm to select optimal satellite orbits that maximize coverage
@@ -54,8 +61,8 @@ class Synthesizer():
         R,cid,file=data
         data=np.load(file,allow_pickle=True)
         fulltime_cover=data[2][0]
-        dot=fulltime_cover @ R
-        return [dot[0],cid]
+        dot=coverage_gain(fulltime_cover, R)
+        return [dot,cid]
         
     def _update_residual(self,R, file,sat_num):
         """
