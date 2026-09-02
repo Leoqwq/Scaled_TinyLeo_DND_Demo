@@ -36,6 +36,7 @@ sys.modules.setdefault(
 
 import sn_orchestrator_mpc
 from failure_recovery_mpc import MPCFaultHandler
+from geographic_srv6_anycast import utils as srv6_utils
 from southbound import sn_utils
 from southbound import sn_remote
 from southbound.sn_controller import RemoteController, RemoteMachine
@@ -788,6 +789,35 @@ class ControllerPlumbingTests(unittest.TestCase):
 
 
 class RuntimeAcknowledgementTests(unittest.TestCase):
+    def test_route_update_handler_triggers_once_for_a_new_timestamp(self):
+        manager = types.SimpleNamespace(ts=6, ts_changed_trigger=mock.Mock())
+        handler = srv6_utils.RouteUpdateHandler(manager)
+        event = types.SimpleNamespace(src_path="/resources/controller/ts.txt")
+
+        with mock.patch.object(srv6_utils, "get_ts", return_value=7):
+            handler.on_modified(event)
+            manager.ts_changed_trigger.assert_called_once_with()
+            handler.on_modified(event)
+
+        manager.ts_changed_trigger.assert_called_once_with()
+
+    def test_link_damage_handler_deduplicates_events_from_one_write(self):
+        manager = types.SimpleNamespace(link_changed_trigger=mock.Mock())
+        handler = srv6_utils.LinkDamageHandler(manager)
+        event = types.SimpleNamespace(src_path="/resources/link_change.txt")
+        stats = [
+            types.SimpleNamespace(st_mtime_ns=10),
+            types.SimpleNamespace(st_mtime_ns=10),
+            types.SimpleNamespace(st_mtime_ns=11),
+        ]
+
+        with mock.patch.object(srv6_utils.os, "stat", side_effect=stats):
+            handler.on_modified(event)
+            handler.on_modified(event)
+            handler.on_modified(event)
+
+        self.assertEqual(manager.link_changed_trigger.call_count, 2)
+
     def test_fault_handler_uses_explicit_artifacts_and_source_epoch(self):
         with tempfile.TemporaryDirectory() as tempdir:
             root = Path(tempdir)

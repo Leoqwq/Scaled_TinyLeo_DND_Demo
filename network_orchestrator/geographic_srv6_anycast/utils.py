@@ -78,7 +78,7 @@ class RouteUpdateHandler(FileSystemEventHandler):
             route_manager: The route manager instance to trigger events on.
         """
         self.route_manager = route_manager
-        self.ts_count = 0 
+        self.last_ts = getattr(route_manager, "ts", None)
         self.flush_count = 0
 
     def on_modified(self, event):
@@ -89,10 +89,13 @@ class RouteUpdateHandler(FileSystemEventHandler):
             event: The file system event containing details about the modification.
         """
         if event.src_path.endswith("ts.txt"):
-            self.ts_count += 1
-            if self.ts_count == 2:
+            try:
+                timestamp = get_ts()
+            except (OSError, ValueError):
+                return
+            if timestamp != self.last_ts:
+                self.last_ts = timestamp
                 self.route_manager.ts_changed_trigger()
-                self.ts_count = 0
         elif event.src_path.endswith("flush.txt"):
             self.flush_count += 1
             if self.flush_count == 2:
@@ -113,7 +116,7 @@ class LinkDamageHandler(FileSystemEventHandler):
             route_manager: The route manager instance to trigger events on.
         """
         self.route_manager = route_manager
-        self.modify_count = 0 
+        self.last_mtime_ns = None
 
     def on_modified(self, event):
         """
@@ -123,10 +126,13 @@ class LinkDamageHandler(FileSystemEventHandler):
             event: The file system event containing details about the modification.
         """
         if event.src_path.endswith("link_change.txt"):
-            self.modify_count += 1
-            if self.modify_count == 2:
+            try:
+                mtime_ns = os.stat(event.src_path).st_mtime_ns
+            except OSError:
+                return
+            if mtime_ns != self.last_mtime_ns:
+                self.last_mtime_ns = mtime_ns
                 self.route_manager.link_changed_trigger()
-                self.modify_count = 0
 
 def get_isls(ts):
     with open(f"/resources/isl_state/{ts}.json") as f:
