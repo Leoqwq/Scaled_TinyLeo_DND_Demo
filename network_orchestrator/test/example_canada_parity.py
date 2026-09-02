@@ -580,6 +580,8 @@ def _collect_measurements(
     results = {}
     handles = {}
     command_error = None
+    if measurement_wait_s:
+        sleep(measurement_wait_s)
     for kind, method in methods.items():
         source, target = prepared[kind]
         try:
@@ -593,9 +595,6 @@ def _collect_measurements(
             )
             command_error = exc
             break
-    if command_error is None and measurement_wait_s:
-        sleep(measurement_wait_s)
-
     for kind, handle in handles.items():
         result = getattr(handle, "result", None)
         if not callable(result):

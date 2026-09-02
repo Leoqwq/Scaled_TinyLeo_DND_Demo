@@ -238,6 +238,35 @@ def test_async_measurement_worker_failure_propagates(tmp_path):
     assert str(error) == "remote ping exited nonzero"
 
 
+def test_measurement_settle_wait_happens_before_packet_commands(tmp_path):
+    module = _load_scenario_module("example_canada_parity_measurement_settle")
+    (tmp_path / "controller" / "result").mkdir(parents=True)
+    (tmp_path / "results").mkdir()
+    events = []
+
+    class Controller:
+        local_dir = str(tmp_path / "controller")
+
+        def set_ping(self, *_args):
+            events.append("ping")
+
+        def set_traceroute(self, *_args):
+            events.append("traceroute")
+
+        def set_iperf(self, *_args):
+            events.append("iperf")
+
+    module._collect_measurements(
+        Controller(),
+        0,
+        tmp_path / "results",
+        lambda seconds: events.append(("settle", seconds)),
+        15,
+    )
+
+    assert events == [("settle", 15), "ping", "traceroute", "iperf"]
+
+
 def _resource_sample(_epoch):
     return {
         "process_rss_bytes": 1234,

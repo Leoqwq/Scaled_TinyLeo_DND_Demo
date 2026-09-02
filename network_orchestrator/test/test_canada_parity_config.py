@@ -1218,6 +1218,55 @@ class RuntimeAcknowledgementTests(unittest.TestCase):
         self.assertEqual(second["failed_link"], first["failed_link"])
         self.assertEqual(tuple(calls[0][-1]), ("SH1SAT1", "SH1SAT2"))
 
+    def test_fault_target_does_not_remove_a_ground_station_gateway(self):
+        calls = []
+
+        class Remote:
+            id = 0
+
+            def fault_test(self, *args):
+                calls.append(args)
+                failed_link = list(args[-1])
+                return {
+                    "failed_link": failed_link,
+                    "removed_satellite": failed_link[0],
+                    "replacement_satellite": "SH1SAT9",
+                    "updated_satellites": [failed_link[0], "SH1SAT9"],
+                    "remote_id": 0,
+                }
+
+        remote = Remote()
+        controller = RemoteController.__new__(RemoteController)
+        controller.remote_lst = [remote]
+        controller.nodes = {
+            "SH1SAT1": remote,
+            "SH1SAT2": remote,
+            "SH1SAT3": remote,
+        }
+        controller.all_node_states = {
+            "SH1SAT1": {
+                "gsls": {"GS6": ["ce::6", "00:00:00:00:00:06", 1.0]},
+                "isls": {"SH1SAT2": []},
+            },
+            "SH1SAT2": {
+                "gsls": {},
+                "isls": {"SH1SAT1": [], "SH1SAT3": []},
+            },
+            "SH1SAT3": {"gsls": {}, "isls": {"SH1SAT2": []}},
+        }
+        controller.ts = 6
+        controller.sat_bandwidth = 200
+        controller.sat_loss = 0
+        controller.sat_ground_bandwidth = 96
+        controller.sat_ground_loss = 0
+
+        acknowledgement = controller.tinyleo_fault_test()
+
+        self.assertEqual(
+            acknowledgement["failed_link"], ["SH1SAT2", "SH1SAT3"]
+        )
+        self.assertEqual(tuple(calls[0][-1]), ("SH1SAT2", "SH1SAT3"))
+
     def test_fault_and_srv6_worker_failures_propagate(self):
         class Remote:
             id = 0

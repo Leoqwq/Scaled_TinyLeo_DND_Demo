@@ -344,6 +344,11 @@ class RemoteController():
             for sat2 in sorted(self.all_node_states[sat1].get('isls', {})):
                 if sat1 >= sat2 or self.nodes.get(sat2) is not remote:
                     continue
+                if (
+                    self.all_node_states[sat1].get('gsls')
+                    or self.all_node_states.get(sat2, {}).get('gsls')
+                ):
+                    continue
                 candidates.append((sat1, sat2, remote))
         if not candidates:
             raise RuntimeError(
