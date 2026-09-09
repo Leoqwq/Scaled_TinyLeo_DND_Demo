@@ -327,7 +327,7 @@ class TrafficSession:
                         if record.complete:
                             event['receiver_end_s'] = record.final['end_s']
                             self.owner.stop(key + '-probe')
-                        elif elapsed > d['end_s'] + 5:
+                        elif elapsed > d['end_s'] + 30:
                             raise ValueError(f'{key}: missing final receiver record')
                         if sender.poll() not in (None, 0):
                             raise ValueError(f'{key}: sender failed ({sender.returncode})')
@@ -347,6 +347,21 @@ class TrafficSession:
                                              'ping': record.ping_samples(),
                                              'final': record.final, 'complete': record.complete}
                                        for key, record in self.records.items()}})
+
+    def finish(self, timeout=30):
+        """Bounded report exchange after the last topology frame; no new load."""
+        deadline = time.monotonic() + timeout
+        while time.monotonic() < deadline:
+            with self.lock:
+                if self.owner.errors:
+                    raise ValueError('; '.join(self.owner.errors))
+                complete = all(key in self.records and self.records[key].complete
+                               for key in (d['id'] for d in self.config['traffic_demands']))
+                if complete and all(process.poll() == 0 for name, process in self.owner.processes.items()
+                                    if name.endswith(('-sender', '-receiver'))):
+                    return
+            time.sleep(.05)
+        raise ValueError('Missing final receiver records or normal traffic process exit')
 
     def close(self):
         self.halt.set()

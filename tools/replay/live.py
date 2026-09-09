@@ -309,6 +309,8 @@ class Session:
                         self.state['frames'] = len(self.frames)
                 run_origin_unix, run_origin_mono = time.time(), time.monotonic()
                 run_seconds(301, apply, emit)
+                if traffic is not None:
+                    traffic.finish()
         except Exception as error:
             failure = str(error)
         finally:

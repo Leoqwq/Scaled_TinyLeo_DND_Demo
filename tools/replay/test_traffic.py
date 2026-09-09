@@ -167,6 +167,16 @@ class ScheduleTests(unittest.TestCase):
         events['bulk-cross']['stopped_s'] = 240
         self.assertEqual(due_actions(config, events, 241), [])
 
+    def test_finish_cannot_turn_missing_receiver_records_into_success(self):
+        from traffic import TrafficSession
+        from test_competition import candidate
+        with tempfile.TemporaryDirectory() as directory:
+            session=TrafficSession(candidate(),Path(directory),'/unused')
+            session.started=True
+            with self.assertRaisesRegex(ValueError,'final receiver'):
+                session.finish(timeout=0)
+            session.close()
+
 
 if __name__ == '__main__':
     unittest.main()
