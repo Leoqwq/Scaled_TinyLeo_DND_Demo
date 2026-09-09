@@ -91,6 +91,11 @@ All new modules live under `tools/replay/`. Tests use `test_competition.py`,
 
 ### Task 4: Owned real-traffic measurement lifecycle
 
+Local implementation and parser/process tests are committed in `e1dbfa3`.
+The selected exact receiver format requires iperf3 >=3.20 with `--json-stream`;
+the real fixture was captured on Mac loopback. VM 3.9 text is not used for
+measurement arithmetic. Full Linux namespace scheduling acceptance is pending.
+
 **Files:** Create `tools/replay/traffic.py`, `tools/replay/test_traffic.py`.
 **Interfaces:** `parse_iperf_interval(line: str) -> dict | None`; `parse_ping(line: str) -> dict | None`; `TrafficSession(config, output).start()`, `.advance(second)`, `.snapshot()`, `.close()`.
 
@@ -102,6 +107,9 @@ All new modules live under `tools/replay/`. Tests use `test_competition.py`,
 
 ### Task 5: Runtime integration and archive schema
 
+Local implementation is committed in `12c8dcc`; HTTP/archive tests pass.
+Kernel evidence is collected asynchronously but not yet certified on the VM.
+
 **Files:** Modify `tools/replay/live.py`, `live_server.py`; create `competition_archive.py`, `test_competition_archive.py`; extend `test_live.py`.
 **Interfaces:** `build_competition_archive(run_dir, frames, config, measurements, provenance) -> dict` returns schema_version=2 with legacy map/modes plus scenario, flow_measurements and comparison provenance.
 
@@ -112,6 +120,8 @@ All new modules live under `tools/replay/`. Tests use `test_competition.py`,
 - [ ] Preserve all current Live security, node ownership, polling and download tests. Do not enable VM profile until tests and feasibility gate pass.
 
 ### Task 6: Offline comparison math and contracts
+
+Local implementation and passing Node contract tests are in `a8aedda`.
 
 **Files:** Create `tools/replay/compare.js`, `test_compare.cjs`.
 **Interfaces:** `validatePair(a,b)`, `summarize(run,phase)`, `frameAt(run,second)`, `routeSegments(a,b)`, `firstDifference(a,b,flow)` exported for Node and browser use.
@@ -127,6 +137,10 @@ All new modules live under `tools/replay/`. Tests use `test_competition.py`,
 - [ ] Run `node tools/replay/test_compare.cjs`; ensure no DOM/network dependency. Delta signs follow the spec. Record sample counts and denominator coverage with every metric.
 
 ### Task 7: Single-map Compare UI and offline packaging
+
+Local implementation and passing Chrome contract tests are in `a8aedda`.
+Fixture screenshots were inspected, including English file-picker controls.
+Final visual inspection using matched real v2 recordings awaits Task 8.
 
 **Files:** Modify `tools/replay/seconds.html`, `build_seconds.py`; create `test_compare_browser.cjs`; extend existing browser tests as needed.
 
