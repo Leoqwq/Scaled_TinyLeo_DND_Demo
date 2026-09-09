@@ -58,6 +58,9 @@ def build(archive, output):
 
 def render_html(data, comparison=None):
     template = Path(__file__).with_name('seconds.html').read_text()
+    if data.get('schema_version') == 2:
+        template = template.replace('The embedded historical run used a preset path, not the new northbound algorithm adapter.',
+                                    'The embedded multi-flow recordings use the northbound routing adapters.')
     pair = json.dumps(comparison, separators=(',', ':'), allow_nan=False).replace('<', '\\u003c')
     template = template.replace('<script>__COMPARE_JS__',
         '<script id="comparisonData" type="application/json">' + pair + '</script><script>__COMPARE_JS__')

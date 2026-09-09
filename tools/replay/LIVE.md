@@ -4,8 +4,10 @@
 
 The legacy single-demand runner and the opt-in multi-flow Compare profile are
 separate. See `docs/superpowers/plans/2026-09-08-live-qos-progress.md` for dated
-validation evidence. Multi-flow VM acceptance is in progress; do not infer a
-QoS performance advantage from local tests or route differences alone.
+validation evidence. One real multi-flow A/B pair passed on 2026-09-08 with
+301 frames and zero deadline misses in both runs. Repeated automatic pairs
+were explicitly cancelled by the user. Do not infer universal superiority
+from this one pair, local tests or route differences alone.
 
 ## Multi-flow deployment additions
 

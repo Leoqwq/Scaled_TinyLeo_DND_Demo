@@ -133,3 +133,64 @@ Task 8 remains: safe VM handover, side-by-side iperf upgrade, namespace traffic
 smoke test, kernel shaping/forwarding review, then matched real A/B recordings
 and repeatability acceptance. No new multi-flow emulation has run on the VM.
 The candidate's measured QoS advantage is **not yet validated**.
+
+## VM handover and single-pair acceptance — 2026-09-08 (local time)
+
+The statements above describe the earlier checkpoint. The user subsequently
+authorized VM handover and reduced acceptance from three automatic pairs to
+**one successful A/B pair**, leaving repetition to manual browser runs.
+
+Deployment: `/home/leo/tinyleo-compare-20260909-v1`, preparation log
+`prepare-v6.log`; independent iperf3 3.20 binary under
+`/home/leo/tinyleo-tools/iperf-3.20`. Fresh protobuf modules were generated
+according to the upstream deployment instructions. Old source and all run
+files remain preserved. Only validated old namespace init PIDs were retired.
+
+Integration discoveries and fixes:
+
+- Real out-of-order UDP arrivals generate signed negative interval loss
+  corrections. Preserve them; never clip them to zero.
+- Retain physically valid routing during flow teardown, without continuing
+  its bandwidth reservation or declaring it an active demand.
+- The original 5-second report timeout was too short: in the successful
+  shortest run, bulk returned its real final receiver report at t=246.116 s.
+  Report exchange now has a bounded 30-second grace; missing reports or
+  abnormal process exits remain failures. The 301-state topology clock and
+  80–240 s comparison window are unchanged.
+
+Three failed attempts (88, 245, 245 frames) are retained separately and are not
+included in the accepted pair. Their run IDs are listed in the delivered report.
+
+Accepted records:
+
+| Algorithm | Run ID | Frames | Deadline misses | Maximum apply time |
+|---|---|---:|---:|---:|
+| shortest_path | 27241ed67b124bec98114f5acba5c3fc | 301 | 0 | 0.8173 s |
+| qos_priority | dac7c802b96343fb992c4ade04924066 | 301 | 0 | 0.8077 s |
+
+Both archives passed SHA-256 checks, normal sender/receiver end-event checks,
+signed loss-total reconciliation, 301-frame physical-state equality, shared
+scenario/runtime/time-axis provenance checks and kernel evidence command checks.
+Receiver interval totals omit a few final tail bytes (up to 2000 bytes); those
+bytes remain in raw final totals and are not assigned to a phase. Completed
+interval coverage is approximately 159/160 seconds after boundary exclusions.
+
+Competition-window C2: loss 46.239% → 6.331%, p95 ping RTT 2505 → 140 ms,
+received throughput 2.116 → 3.747 Mbit/s. C2 routes are unchanged; bulk routes
+differ in 139/160 competition states. Telemetry p95 worsened 1331 → 2113 ms,
+and bulk p95 worsened 2653 → 2946 ms; the UI/report retain these tradeoffs.
+This meets the visible-improvement magnitude for **this pair**, not the
+superseded three-pair repeatability gate or a universal superiority claim.
+
+Delivery directory:
+`/Users/leo/Desktop/Obsidian/Satellite/TinyLeo/TinyLeo_CA/outputs/compare-20260909`.
+Contains the bundled `tinyleo-compare.html`, both accepted replay JSON/ZIP/hash
+sets, failed archives, `acceptance-runs.json`, `acceptance-report.md`, and
+`Quickstart.md`. Browser URL remains `http://127.0.0.1:8765/`.
+
+Actual browser verification: bundled Summary loads, bulk routes overlay on one
+map, 10× playback advances real shared states, first-difference seek works,
+and Live shows completed + Archive saved with Start enabled. The browser was
+left paused in Compare. Automatic acceptance scripts exited; only the prepared
+VM service, SSH tunnel and local relay remain for the user's manual runs.
+Local regression: 46 Python tests and all three Chrome suites passed.
