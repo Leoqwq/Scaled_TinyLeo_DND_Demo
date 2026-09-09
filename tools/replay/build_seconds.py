@@ -52,10 +52,17 @@ def build(archive, output):
             boundary = boundary['features'][0]
         data = dict(map=boundary, modes={'shortest': frames}, summary=summary,
                     batches=batches, continuous_ping=read(run + '/ping-continuous.txt'), source=run)
-    template = Path(__file__).with_name('seconds.html').read_text()
-    payload = json.dumps(data, separators=(',', ':')).replace('<', '\\u003c')
-    output.write_text(template.replace('__REPLAY_DATA__', payload))
+    output.write_text(render_html(data))
     print(f'Built {output}: {output.stat().st_size:,} bytes; 301 frames, 1 second/frame')
+
+
+def render_html(data):
+    template = Path(__file__).with_name('seconds.html').read_text()
+    # Embed code and data for file:// use; no external script or CDN requests.
+    for marker, name in [('__COMPARE_JS__', 'compare.js'), ('__COMPARE_UI_JS__', 'compare_ui.js')]:
+        template = template.replace(marker, Path(__file__).with_name(name).read_text())
+    payload = json.dumps(data, separators=(',', ':'), allow_nan=False).replace('<', '\\u003c')
+    return template.replace('__REPLAY_DATA__', payload)
 
 
 if __name__ == '__main__':
