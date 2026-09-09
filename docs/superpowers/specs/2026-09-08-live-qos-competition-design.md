@@ -227,14 +227,41 @@ results as prominently as C2 improvement. Do not generate an unqualified
 `QoS wins` label from a single imported pair. Repeated acceptance results,
 when available, are a separate evidence set, not fabricated from one pair.
 
-### Synchronized dual replay
+### Synchronized single-map route overlay
 
-Below the summary, place Shortest Path on the left and QoS Priority on the
-right. Share one simulation-time cursor, flow selector, play/pause control,
-one-second stepping, and speed selector (`1×`, `5×`, `10×`). Synchronize camera
-extent/zoom and use the same color for the same flow. Highlight the selected
-flow's geographic path; dim background nodes/links. Labels must distinguish
-geographic intent from an observed satellite-hop trace.
+Below the summary, use one physical-topology map and overlay both algorithms'
+geographic routes for the same selected flow and simulation time. Do not build
+a dual-map layout or a single/dual-map switch in the first version. Keep one
+simulation-time cursor, flow selector, play/pause control, one-second stepping,
+and speed selector (`1×`, `5×`, `10×`). The final summary, phase controls and
+aligned performance plots remain unchanged.
+
+Render satellites and physical links once, as a dim background, only after
+validating the two runs' physical states agree at that timestamp. If they
+disagree, visibly flag the mismatch and withhold the overlay for that frame;
+do not silently use one run's topology to represent both.
+
+Classify geographic route segments by directed cell pair:
+
+- Shared segments: thin neutral-gray lines, drawn once.
+- Shortest Path-only segments: blue solid lines.
+- QoS Priority-only segments: orange dashed lines.
+
+Show direction arrows and a persistent legend; color alone must not carry
+algorithm identity. Opposite directions on the same cell boundary are not a
+shared segment: offset the strokes enough to show both directions. These are
+geographic cell-to-cell paths, not inferred satellite-level packet traces;
+keep that distinction visible in the map label and legend.
+
+Select one flow at a time by default. Do not add an all-flow overlay to the
+first version. Beside the map, show flow ID, class, priority, and the complete
+cell sequence for each algorithm. An `Only show differences` toggle hides
+shared route segments but retains source/destination markers, the legend and
+both route strings. If the two complete paths are equal, show
+`Same route at this time`; an empty difference overlay is then intentional,
+not a rendering error. Missing routes are unknown/unavailable rather than
+identical. Enable `First route difference` only for a recorded, comparable
+timestamp with genuinely different paths.
 
 Join frames by `simulation_time_s`, never wall-clock start or array index.
 Missing timestamps produce a visible missing-state panel; do not show a stale
@@ -255,9 +282,10 @@ the selected flow; disable it with an explanation when there is no difference.
 It must not be confused with a difference in physical satellite topology.
 
 Recommended 3–4 minute presentation: summary and experimental conditions;
-jump to competition, select bulk and explain displacement; show C2 measured
-behavior and bulk cost; briefly show Live ready/algorithm selection/start,
-then return to recorded results without waiting for completion.
+jump to competition and select C2 to explain its retained route when supported
+by the data; select bulk and use the route overlay to explain displacement;
+show C2 measured behavior and bulk cost; briefly show Live ready/algorithm
+selection/start, then return to recorded results without waiting for completion.
 
 ### Comparison validity
 
@@ -307,10 +335,15 @@ Technical acceptance:
 - Old single-flow archives still replay; SSH token security and manual node
   lifecycle are preserved.
 - Offline Compare imports both results without contacting a VM, renders the
-  phase-filtered summary and synchronized replay, and preserves evidence labels.
+  phase-filtered summary and synchronized single-map overlay, and preserves
+  evidence labels. The physical topology is drawn once, not duplicated.
 - Browser tests cover timestamp gaps, zero baselines, missing metrics,
   incompatible pairs, unchanged paths, seek/play/speed synchronization, and
   Live polling/download continuity while Compare is visible.
+- Overlay tests cover directed shared/exclusive segment classification,
+  opposite-direction overlap, line styles and legend, flow switching, complete
+  route strings, `Only show differences`, `Same route at this time`, missing
+  routes, per-frame physical-state mismatches and `First route difference`.
 - Summary tests recompute packet-weighted loss, raw-sample p95 and throughput
   from known fixtures, including phase boundaries and incomplete coverage.
 
