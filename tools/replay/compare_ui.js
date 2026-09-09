@@ -40,6 +40,10 @@ async function importComparison(event,side){
   if(generation!==comparison.imports[side])return;
   comparison[side]=parsed;
   if(!comparison.shortest||!comparison.qos){$('compareStatus').textContent='Recording loaded. Choose the other algorithm to compare.';return;}
+  activateComparison();
+ }catch(error){if(generation===comparison.imports[side]){$('compareStatus').textContent='Cannot compare: '+error.message;comparison.valid=false;}}
+}
+function activateComparison(){
   const check=CC.validatePair(comparison.shortest,comparison.qos);
   if(!check.valid)throw Error(check.errors.join(' · '));
   comparison.valid=true;$('compareResults').hidden=false;$('comparePlay').disabled=false;
@@ -47,7 +51,6 @@ async function importComparison(event,side){
   $('compareFlow').replaceChildren();
   for(const d of comparison.shortest.scenario.traffic_demands){const option=document.createElement('option');option.value=d.id;option.textContent=`${d.id} · ${d.service_class} · P${d.priority}`;$('compareFlow').append(option);}
   comparison.time=80;compareSummary();compareRender();
- }catch(error){if(generation===comparison.imports[side]){$('compareStatus').textContent='Cannot compare: '+error.message;comparison.valid=false;}}
 }
 $('compareShortest').onchange=e=>importComparison(e,'shortest');
 $('compareQos').onchange=e=>importComparison(e,'qos');
@@ -149,3 +152,8 @@ $('comparePhase').onchange=()=>{compareSummary();compareRender();};
 $('compareFirstDifference').onclick=()=>{const t=CC.firstDifference(comparison.shortest,comparison.qos,$('compareFlow').value);if(t!==null)compareSeek(t);};
 document.querySelectorAll('[data-compare-jump]').forEach(button=>button.onclick=()=>compareSeek(Number(button.dataset.compareJump)));
 document.addEventListener('visibilitychange',()=>{if(document.hidden)compareStop();});
+const bundledComparison=JSON.parse($('comparisonData')?.textContent||'null');
+if(bundledComparison){
+ try{comparison.shortest=bundledComparison.shortest;comparison.qos=bundledComparison.qos;activateComparison();showCompare();}
+ catch(error){$('compareStatus').textContent='Cannot compare bundled recordings: '+error.message;showCompare();}
+}

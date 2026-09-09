@@ -56,8 +56,11 @@ def build(archive, output):
     print(f'Built {output}: {output.stat().st_size:,} bytes; 301 frames, 1 second/frame')
 
 
-def render_html(data):
+def render_html(data, comparison=None):
     template = Path(__file__).with_name('seconds.html').read_text()
+    pair = json.dumps(comparison, separators=(',', ':'), allow_nan=False).replace('<', '\\u003c')
+    template = template.replace('<script>__COMPARE_JS__',
+        '<script id="comparisonData" type="application/json">' + pair + '</script><script>__COMPARE_JS__')
     # Embed code and data for file:// use; no external script or CDN requests.
     for marker, name in [('__COMPARE_JS__', 'compare.js'), ('__COMPARE_UI_JS__', 'compare_ui.js')]:
         template = template.replace(marker, Path(__file__).with_name(name).read_text())

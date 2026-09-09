@@ -49,6 +49,14 @@ const {run}=require('./test_compare.cjs');
   assert.equal(await page.locator('#comparePanel').isVisible(),false);
   assert.equal(await page.locator('#map').isVisible(),true);
   assert.deepEqual(errors,[]);
+  const bundled=await browser.newPage();
+  const pair=JSON.stringify({shortest:run(),qos:q}).replaceAll('<','\\u003c');
+  const html=fs.readFileSync(process.argv[2],'utf8').replace('<script id="comparisonData" type="application/json">null</script>',`<script id="comparisonData" type="application/json">${pair}</script>`);
+  await bundled.context().setOffline(true);
+  await bundled.setContent(html);
+  assert.equal(await bundled.locator('#comparePanel').isVisible(),true);
+  assert.match(await bundled.locator('#compareStatus').textContent(),/Matched recorded inputs/);
+  assert.equal(await bundled.locator('#comparePlay').isEnabled(),true);
   console.log('PASS: offline Summary, single-map overlay, phase/seek/speed, mismatch rejection, legacy switch and mobile layout.');
  }finally{await browser.close();}
 })().catch(e=>{console.error(e);process.exit(1);});
