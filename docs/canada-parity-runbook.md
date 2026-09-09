@@ -1,10 +1,17 @@
 # Canada parity-scale emulation runbook
 
+> Historical coarse-snapshot feasibility profile. Its trajectory samples and
+> wall-clock replay interval do not represent a one-second physical time axis.
+> Use [the one-second workflow](second-resolution-emulation.md) for temporal
+> fidelity and live demonstrations. Passing this profile does not establish
+> real-time orbital fidelity.
+
 This runbook is the reproducible acceptance procedure for one Google Cloud
 `n2-standard-8` VM (8 vCPU, 32 GiB RAM). The finite 12-epoch profile preserves
-TinyLEO's real orbital positions, MPC topology generation, Linux namespace
+TinyLEO's legacy sampled positions, MPC topology generation, Linux namespace
 nodes, ISL/GSL link model, SRv6 agents, measurements, and deterministic failure
-path. Only concurrent satellite count and total run duration are reduced.
+path. It reduces satellite count and snapshot count; it does not validate a
+physically consistent real-time trajectory or second-resolution link dynamics.
 
 No n2 measurements are checked into this repository. Every result table below
 is deliberately marked `PENDING` until the commands are run on the target VM.

@@ -21,7 +21,10 @@ TinyLEO toolkit/
 └── README.md              # This file
 ```
 
-For the finite 12-epoch, 64–96-satellite Canada feasibility workflow and its
+For real-time Canada experiments, use the [one-second emulation workflow](docs/second-resolution-emulation.md):
+301 physical samples over 300 seconds, deadline telemetry, and independent packet probes.
+
+For the historical finite 12-epoch, 64–96-satellite Canada feasibility workflow and its
 fail-closed acceptance checks, see the
 [Canada parity-scale emulation runbook](docs/canada-parity-runbook.md).
 
