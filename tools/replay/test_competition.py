@@ -169,6 +169,19 @@ class RoutingTests(unittest.TestCase):
         self.assertEqual(final['directed_load_gbps'], {})
         self.assertEqual(final['policy'], {})
 
+    def test_ended_flow_keeps_forwarding_until_receiver_finishes(self):
+        from competition import CompetitionRouter, retain_draining_routes
+        router=CompetitionRouter(candidate(), 'shortest_path')
+        previous=router.choose(ladder(),239)
+        current=router.choose(ladder(),240)
+        retain_draining_routes(current,previous,{},240)
+        self.assertIn('[2, 2]->[3, 4]',current['policy'])
+        self.assertEqual([f['id'] for f in current['draining_flows']],['bulk-cross'])
+        self.assertNotIn('bulk-cross',[f['id'] for f in current['flows']])
+        finished=router.choose(ladder(),241)
+        retain_draining_routes(finished,current,{'bulk-cross':True},241)
+        self.assertNotIn('[2, 2]->[3, 4]',finished['policy'])
+
     def test_missing_path_fails_instead_of_reusing_old_policy(self):
         from competition import CompetitionRouter
         router = CompetitionRouter(candidate(), 'qos_priority')

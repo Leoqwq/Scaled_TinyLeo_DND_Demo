@@ -73,6 +73,27 @@ def validate_directions(flows):
             directions.add((a, b))
 
 
+def retain_draining_routes(current, previous, completed, second):
+    """Keep valid forwarding for in-flight packets/control until UDP teardown.
+
+    These paths reserve no offered load and are not active routing demands.
+    Never silently retain an edge that has left the physical topology.
+    """
+    current['draining_flows'] = []
+    if not previous:
+        return
+    for flow in previous.get('flows', []) + previous.get('draining_flows', []):
+        if second < flow['end_s'] or completed.get(flow['id'], False):
+            continue
+        path = flow['path']
+        if any(current['edge_capacity_gbps'].get(f'{a}->{b}', 0) <= 0
+               for a, b in zip(path, path[1:])):
+            raise ValueError(f"Draining route left physical topology: {flow['id']}")
+        current['policy'][f'{_geographic(path[0])}->{_geographic(path[-1])}'] = [
+            _geographic(c) for c in path[1:-1]]
+        current['draining_flows'].append(dict(flow, demand_gbps=0, lifecycle='draining'))
+
+
 class CompetitionRouter:
     def __init__(self, config, algorithm):
         if algorithm not in ('shortest_path', 'qos_priority'):

@@ -153,6 +153,10 @@ Final visual inspection using matched real v2 recordings awaits Task 8.
 
 ### Task 8: VM validation and presenter handoff
 
+User revision (2026-09-08): run **one** successful A/B pair automatically,
+then leave the prepared browser demo available for the user's manual repeat.
+Do not launch the originally planned second and third automatic pairs.
+
 **Files:** New versioned VM deployment; local new results; update `tools/replay/LIVE.md` and the user's manual only after validated commands exist.
 
 - [ ] Verify VM idle state and obtain a safe manual re-preparation window before retiring the old prepared session. Do not interrupt a user run or issue broad cleanup commands.

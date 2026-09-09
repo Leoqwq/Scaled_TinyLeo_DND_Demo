@@ -216,6 +216,7 @@ class Session:
         traffic = None
         evidence = None
         previous_policy = None
+        previous_routing = None
         run_origin_unix = run_origin_mono = None
         try:
             if self.competition_config is None:
@@ -262,7 +263,7 @@ class Session:
                 (preview_dir / folder).mkdir(parents=True)
             with (out / 'telemetry.jsonl').open('w') as log:
                 def apply(epoch):
-                    nonlocal routing, previous_policy
+                    nonlocal routing, previous_policy, previous_routing
                     controller._generate_topology_for_timestamp(epoch)
                     runtime = Path(controller.local_dir)
                     shell = json.loads((runtime / 'all_isl_positions' / f'{epoch}.json').read_text())
@@ -277,6 +278,10 @@ class Session:
                         policy, routing = adapter.choose(states)
                     else:
                         routing = adapter.choose(states, epoch)
+                        from competition import retain_draining_routes
+                        completed = {key: flow['complete'] for key, flow in traffic.snapshot()['flows'].items()}
+                        retain_draining_routes(routing, previous_routing, completed, epoch)
+                        previous_routing = deepcopy(routing)
                         policy = routing['policy']
                     controller.geopraphic_routing_policy = policy
                     controller.update_tinyleo_topology(epoch)
