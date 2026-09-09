@@ -11,6 +11,14 @@ HERE = Path(__file__).resolve().parent
 
 
 class MeasurementTests(unittest.TestCase):
+    def test_late_udp_packets_preserve_signed_loss_correction(self):
+        from traffic import parse_iperf_interval
+        event=json.loads((HERE / 'fixtures/iperf320-receiver.jsonl').read_text().splitlines()[1])
+        event['data']['sum'].update(bytes=383000, packets=64, lost_packets=-319)
+        result=parse_iperf_interval(json.dumps(event))
+        self.assertEqual(result['lost_packets'], -319)
+        self.assertEqual(result['bytes_received'], 383000)
+
     def test_receiver_intervals_have_exact_bytes_not_rounded_text(self):
         from traffic import parse_iperf_interval
         lines = (HERE / 'fixtures/iperf320-receiver.jsonl').read_text().splitlines()

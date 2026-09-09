@@ -82,7 +82,8 @@
   }
   function validInterval(r) {
     return finite(r.start_s)&&finite(r.end_s)&&r.end_s>r.start_s&&finite(r.duration_s)&&r.duration_s>0
-      &&['packets','lost_packets','bytes_received'].every(k=>Number.isInteger(r[k])&&r[k]>=0)
+      &&['packets','bytes_received'].every(k=>Number.isInteger(r[k])&&r[k]>=0)
+      &&Number.isInteger(r.lost_packets)
       &&r.lost_packets<=r.packets;
   }
   function summarize(run,phase='competition') {
@@ -106,7 +107,7 @@
       const missed=probes.filter(p=>p.kind==='unanswered');
       const paths=frames(run).filter(f=>f.telemetry.simulation_time_s>=start&&f.telemetry.simulation_time_s<end)
         .map(f=>f.routing?.flows?.find(d=>d.id===demand.id)?.path).filter(p=>Array.isArray(p)&&p.length>=2);
-      result.flows[demand.id]={loss_percent:packets?lost/packets*100:null,
+      result.flows[demand.id]={loss_percent:packets&&lost>=0?lost/packets*100:null,
         throughput_mbps:duration?bytes*8/duration/1e6:null,rtt_p95_ms:percentile(replies.map(p=>p.rtt_ms)),
         packets,lost_packets:lost,bytes_received:bytes,ping_samples:replies.length,
         ping_loss_percent:replies.length+missed.length?missed.length/(replies.length+missed.length)*100:null,

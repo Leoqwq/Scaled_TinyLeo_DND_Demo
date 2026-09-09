@@ -33,9 +33,13 @@ def _receiver_sum(data):
             raise ValueError(f'Invalid receiver {key}')
     if data['end'] <= data['start'] or data['seconds'] <= 0:
         raise ValueError('Empty receiver interval')
-    for key in ('bytes', 'packets', 'lost_packets'):
+    for key in ('bytes', 'packets'):
         if type(data.get(key)) is not int or data[key] < 0:
             raise ValueError(f'Invalid receiver {key}')
+    # iperf subtracts late/out-of-order packets from its cumulative loss
+    # estimate. An interval delta can therefore legitimately be negative.
+    if type(data.get('lost_packets')) is not int:
+        raise ValueError('Invalid receiver lost_packets')
     if data['lost_packets'] > data['packets']:
         raise ValueError('Receiver loss exceeds packet count')
     return {'start_s': data['start'], 'end_s': data['end'],

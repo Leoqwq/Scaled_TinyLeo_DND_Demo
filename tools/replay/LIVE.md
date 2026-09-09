@@ -2,9 +2,39 @@
 
 ## Status
 
-Implemented locally; real VM integration and one-second deadline acceptance
-are not yet verified for this new Live runner. Do not infer that the previous
-301-frame timing result applies to this runner, which also computes routing.
+The legacy single-demand runner and the opt-in multi-flow Compare profile are
+separate. See `docs/superpowers/plans/2026-09-08-live-qos-progress.md` for dated
+validation evidence. Multi-flow VM acceptance is in progress; do not infer a
+QoS performance advantage from local tests or route differences alone.
+
+## Multi-flow deployment additions
+
+Generate the deployment-only protobuf modules in each fresh source directory:
+
+```sh
+cd network_orchestrator/southbound
+/home/leo/tinyleo-venv/bin/python -m grpc_tools.protoc -I. --python_out=./ --grpc_python_out=./ ./link_failure_grpc/link_failure.proto
+```
+
+Add `--competition-scenario tools/replay/competition-routing.json` and
+`--iperf-binary /home/leo/tinyleo-tools/iperf-3.20/bin/iperf3` to the preparation
+command below. This requires re-preparing the nodes with the new shaping
+profile. iperf3 >=3.20 is installed side by side; the original system binary
+need not change. Keep preparation stdout/stderr in a persistent log.
+
+The new profile records three UDP flows, ping probes, per-flow priorities,
+actual geographic routing decisions, raw kernel counter/policy evidence and
+version-2 archives. The receiver's signed loss-counter corrections are retained:
+late packets can reduce earlier loss estimates. Phase aggregates sum these
+signed deltas; negative aggregate loss is unknown rather than clipped to zero.
+Negative interval corrections are gaps in the loss chart, not zero-loss samples.
+
+Compare imports a completed Shortest Path v2 recording and a completed QoS
+Priority v2 recording. It rejects incompatible provenance. It shows the final
+competition-window summary before playback and overlays both cell-level route
+intents on one map; these are not observed satellite-hop packet traces.
+
+Legacy setup details below remain applicable without the competition flag.
 
 The existing HTML has Replay and Live modes. Opening it as a file supports
 offline replay/import only. Live requires the local relay and a manually

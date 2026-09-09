@@ -101,7 +101,7 @@ function compareMap(frame,segments,paths){
 function series(run,demand,metric){
  const records=run.flow_measurements?.[demand?.id]||{};
  if(metric==='rtt')return (records.ping||[]).map(r=>({t:r.simulation_time_s,value:r.kind==='reply'?r.rtt_ms:null}));
- return (records.intervals||[]).map(r=>({t:r.end_s,value:metric==='loss'?(r.packets?r.lost_packets/r.packets*100:null):r.duration_s>0?r.bytes_received*8/r.duration_s/1e6:null}));
+ return (records.intervals||[]).map(r=>({t:r.end_s,value:metric==='loss'?(r.packets&&r.lost_packets>=0?r.lost_packets/r.packets*100:null):r.duration_s>0?r.bytes_received*8/r.duration_s/1e6:null}));
 }
 function comparePlot(id,demand,metric){
  const svg=$(id);svg.replaceChildren();const [lo,hi]=CC.PHASES[$('comparePhase').value];
