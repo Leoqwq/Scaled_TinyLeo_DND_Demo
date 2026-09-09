@@ -1,6 +1,7 @@
 # Real-flow QoS competition demo — design for review
 
-Date: 2026-09-08. Status: design for user review; not implemented or VM-validated.
+Date: 2026-09-08. Status: user approved the comparison-first presentation
+direction; implementation and VM validation have not started.
 
 ## Objective
 
@@ -166,6 +167,114 @@ destroy manually prepared nodes as a side effect of browser Start.
 
 ## Live/Replay and archive contract
 
+### Presentation workflow: recorded comparison first
+
+The primary demo uses previously completed real emulation runs. The audience
+must not wait for two five-minute runs. Extend the existing page to three
+English modes: `Live | Replay | Compare`. Live remains a short demonstration
+of remote-start capability; changing to Compare does not cancel that run.
+The relay continues polling and saving the active run regardless of UI mode.
+
+Compare accepts one Shortest Path and one QoS Priority replay archive and
+works offline with no VM, SSH connection, or network dependency. Label it
+`Recorded emulation results` and show both run IDs. Reuse the existing map
+and archive infrastructure, not a separate Streamlit application. The
+presenter can import the paired JSON files before recording; no assumption
+is made that a local browser may automatically read arbitrary sibling files.
+
+### Summary first, then explanation
+
+Compare opens on the final summary, not on an empty map or a running animation.
+Show node counts, demand count, duration, scenario identity, and comparison
+validity above the table. Default the measurement window to the predeclared
+competition phase. Offer `Baseline`, `Competition`, `Recovery`, and `Full run`
+selectors, with explicit time bounds and measurement coverage in every view.
+Never silently select the most favorable interval.
+
+| Summary row | Shortest Path | QoS Priority | Change |
+|---|---|---|---|
+| C2 UDP loss | receiver measurement | receiver measurement | percentage points |
+| C2 p95 ping RTT | raw successful RTT samples | raw successful RTT samples | percent |
+| C2 received throughput | receiver bytes / observed duration | same | percent |
+| Bulk received throughput | receiver bytes / observed duration | same | percent |
+| Per-flow mean geographic path hops | computed route state | computed route state | hops |
+| Topology deadline misses | recorded count | recorded count | count |
+
+For the loss delta, report QoS minus shortest in percentage points. For other
+relative changes, use `(qos - shortest) / shortest * 100`, displaying a signed
+value and metric-aware explanation. A zero baseline gives `N/A`, never infinity
+or a misleading 100% gain. Loss is computed from summed receiver packet counts,
+not the unweighted mean of interval percentages; RTT p95 from raw samples,
+not averages of interval percentiles. Report successful RTT sample count and
+probe loss alongside p95 so lost probes cannot appear as low latency.
+
+Interval counters must have explicit start/end times. Include only fully
+contained intervals in phase summaries and display excluded boundary duration;
+do not prorate packet counts without packet timestamps. Missing measurements
+remain unknown, with coverage visible. Incomplete coverage does not qualify
+for the positive-benefit acceptance gate. Compute final summaries from raw
+archive records; live aggregates are provisional.
+
+Add a per-demand table with ID, class, priority, endpoints, active phase,
+offered rate, most frequent path(s) and frame counts per algorithm, and number
+of differing route frames out of comparable active frames. Never imply that
+the dominant path was used for the whole run. Changed paths are differentiation
+evidence, not on their own performance-benefit evidence.
+
+Do not present the teammate's offline required-ISL count as measured benefit
+here: the physical network is fixed. Display bulk tradeoffs and all negative
+results as prominently as C2 improvement. Do not generate an unqualified
+`QoS wins` label from a single imported pair. Repeated acceptance results,
+when available, are a separate evidence set, not fabricated from one pair.
+
+### Synchronized dual replay
+
+Below the summary, place Shortest Path on the left and QoS Priority on the
+right. Share one simulation-time cursor, flow selector, play/pause control,
+one-second stepping, and speed selector (`1×`, `5×`, `10×`). Synchronize camera
+extent/zoom and use the same color for the same flow. Highlight the selected
+flow's geographic path; dim background nodes/links. Labels must distinguish
+geographic intent from an observed satellite-hop trace.
+
+Join frames by `simulation_time_s`, never wall-clock start or array index.
+Missing timestamps produce a visible missing-state panel; do not show a stale
+frame as current, interpolate a route, or silently realign mismatched data.
+At increased playback speed the cursor can advance faster, but all original
+one-second states remain available for exact seeking. Changing phase filter
+updates summary/chart scope; seeking alone does not recompute the final table.
+
+Three compact aligned plots show C2 ping RTT, C2 UDP interval loss, and bulk
+receiver throughput, with both algorithms overlaid and a shared cursor.
+Shade baseline/competition/recovery windows. Per-second RTT points are actual
+samples or explicitly labeled interval statistics, not p95 over one sample
+presented as a stable tail metric. Display gaps for missing records.
+
+Navigation buttons: `Baseline`, `Competition begins`, `Recovery`, and
+`First route difference`. The latter is derived from actual paired paths for
+the selected flow; disable it with an explanation when there is no difference.
+It must not be confused with a difference in physical satellite topology.
+
+Recommended 3–4 minute presentation: summary and experimental conditions;
+jump to competition, select bulk and explain displacement; show C2 measured
+behavior and bulk cost; briefly show Live ready/algorithm selection/start,
+then return to recorded results without waiting for completion.
+
+### Comparison validity
+
+Check algorithm identities, schema compatibility, successful completion,
+scenario and per-demand IDs, time axis, physical topology hash, shaping/queue
+profile, traffic schedule/packet settings, and relevant runtime version.
+Algorithm selection is excluded from the shared-input hash by construction.
+Show actual flow-start timing and alignment deviations separately.
+
+For unequal conditions, retain individual Replay access but disable paired
+gain calculations and synchronized-comparison claims with specific mismatch
+messages. Legacy single-flow archives remain playable; missing multi-flow
+metrics are not inferred. A valid input match establishes comparable intent,
+not proof of identical execution or of a statistically significant benefit.
+
+### Data contract
+
 Version the replay schema while retaining the old single-flow import path.
 Each new frame carries a flow list keyed by stable demand ID, algorithm,
 active phase, paths and QoS feasibility, observed measurements with source
@@ -197,6 +306,13 @@ Technical acceptance:
   import reproduces its phase/path/measurement history.
 - Old single-flow archives still replay; SSH token security and manual node
   lifecycle are preserved.
+- Offline Compare imports both results without contacting a VM, renders the
+  phase-filtered summary and synchronized replay, and preserves evidence labels.
+- Browser tests cover timestamp gaps, zero baselines, missing metrics,
+  incompatible pairs, unchanged paths, seek/play/speed synchronization, and
+  Live polling/download continuity while Compare is visible.
+- Summary tests recompute packet-weighted loss, raw-sample p95 and throughput
+  from known fixtures, including phase boundaries and incomplete coverage.
 
 Demonstration acceptance after calibration: execute three matched A/B pairs,
 alternating order, using the locked scenario. Analyze the full predeclared
@@ -237,4 +353,7 @@ synthetic route playback presented as Live, no topology/synthesizer redesign,
 no general multi-tenant traffic platform, and no same-cell-pair classifier in
 this first version.
 
-Next gate: user review of this design, then a concrete implementation plan.
+Next step: write the implementation plan against this comparison-first design.
+Treat scenario feasibility as an early gate, so UI completion cannot be mistaken
+for verified real QoS benefit. User approval of presentation does not certify
+the initial candidate traffic rates or any performance result.
