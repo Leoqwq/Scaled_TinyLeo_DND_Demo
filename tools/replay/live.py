@@ -83,7 +83,7 @@ class RoutingAdapter:
 
 
 class Session:
-    def __init__(self, root, template, routing_config):
+    def __init__(self, root, template, routing_config, *, competition_scenario=None, iperf_binary='iperf3'):
         self.root, self.template, self.routing_config = root, template, routing_config
         self.lock = threading.Lock()
         self.state = dict(status='not_prepared', run_id=None, frames=0)
@@ -91,6 +91,22 @@ class Session:
         self.controller = None
         self.out = None
         self.archive = None
+        self.competition_config = None
+        self.iperf_binary = str(iperf_binary)
+        self.traffic = None
+        if competition_scenario is not None:
+            from scenario import validate_scenario
+            self.competition_config = validate_scenario(json.loads(Path(competition_scenario).read_text()))
+
+    def profile_config(self, config):
+        config = dict(config)
+        if self.competition_config is not None:
+            shaping = self.competition_config['shaping']
+            if shaping['queue_packets'] != 1000:
+                raise ValueError('Current netem profile supports its existing 1000-packet limit only')
+            config['satellite link bandwidth ("X" Gbps)'] = shaping['isl_gbps']
+            config['sat-ground bandwidth ("X" Gbps)'] = shaping['gsl_gbps']
+        return config
 
     def prepare(self):
         """Called only by the human-invoked VM command, never by an HTTP request."""
@@ -107,7 +123,12 @@ class Session:
         report = json.loads((self.root / 'validation/validation_report.json').read_text())
         if axis['num_epochs'] != 301 or axis['sample_interval_s'] != 1 or not report.get('valid') or report.get('errors') or report.get('expected_epochs') != 301:
             raise ValueError('Requires validated 301-state, one-second artifacts')
-        config = json.loads(self.template.read_text())
+        config = self.profile_config(json.loads(self.template.read_text()))
+        if self.competition_config is not None:
+            from traffic import require_streaming
+            version = subprocess.check_output([self.iperf_binary, '--version'], text=True, timeout=5)
+            help_text = subprocess.check_output([self.iperf_binary, '--help'], text=True, timeout=5)
+            require_streaming(version, help_text)
         if len(config['Machines']) != 1 or config['Machines'][0]['IP'] != '127.0.0.1':
             raise ValueError('Live preparation supports only the existing single-VM loopback deployment')
         name = 'live-session-' + uuid.uuid4().hex
@@ -160,6 +181,7 @@ class Session:
             self.out = self.root / 'live-results' / run_id
             self.out.mkdir(parents=True)
             self.frames, self.archive = [], None
+            self.traffic = None
             self.state = dict(status='running', run_id=run_id, algorithm=algorithm, frames=0)
             threading.Thread(target=self._run, args=(algorithm,), daemon=True).start()
             return dict(self.state)
@@ -175,6 +197,8 @@ class Session:
             with (out / 'run.log').open('rb') as stream:
                 stream.seek(max(0, (out / 'run.log').stat().st_size-12000))
                 value['log'] = stream.read().decode(errors='replace')
+        if self.traffic is not None:
+            value['traffic'] = self.traffic.snapshot()
         return value
 
     def _run(self, algorithm):
@@ -189,9 +213,29 @@ class Session:
         ping = None
         ping_file = None
         failure = None
+        traffic = None
+        evidence = None
+        previous_policy = None
+        run_origin_unix = run_origin_mono = None
         try:
-            adapter = RoutingAdapter(self.routing_config, algorithm)
-            shutil.copy2(self.routing_config, out / 'routing-config.json')
+            if self.competition_config is None:
+                adapter = RoutingAdapter(self.routing_config, algorithm)
+            else:
+                from competition import CompetitionRouter
+                from traffic import TrafficSession
+                adapter = CompetitionRouter(self.competition_config, algorithm)
+                (out / 'scenario.json').write_text(json.dumps(self.competition_config, indent=2))
+                traffic = TrafficSession(self.competition_config, out, self.iperf_binary)
+                self.traffic = traffic
+                traffic.start()
+                from evidence import EvidenceCollector
+                ground = sorted({d[k] for d in self.competition_config['traffic_demands']
+                                 for k in ('source_gs', 'destination_gs')})
+                evidence = EvidenceCollector(out, ground)
+            if self.competition_config is None:
+                shutil.copy2(self.routing_config, out / 'routing-config.json')
+            else:
+                (out / 'routing-config.json').write_text(json.dumps(self.competition_config, indent=2))
             (out / 'run-config.json').write_text(json.dumps({
                 'algorithm': algorithm, 'frames':301, 'sample_interval_s':1,
                 'sat_bandwidth_gbps':controller.sat_bandwidth,
@@ -208,16 +252,17 @@ class Session:
             from southbound.sn_utils import update_tinyleo_link
             from copy import deepcopy
             routing = {}
-            ping_file = (out / 'ping-continuous.txt').open('w')
-            ping = subprocess.Popen(['ip','netns','exec','GS4','ping','-n','-6','-i','1','-D','-O',
-                                     'ce:3:ce:4:6::6'], stdout=ping_file, stderr=subprocess.STDOUT,
-                                    start_new_session=True)
+            if traffic is None:
+                ping_file = (out / 'ping-continuous.txt').open('w')
+                ping = subprocess.Popen(['ip','netns','exec','GS4','ping','-n','-6','-i','1','-D','-O',
+                                         'ce:3:ce:4:6::6'], stdout=ping_file, stderr=subprocess.STDOUT,
+                                        start_new_session=True)
             preview_dir = out / 'preview'
             for folder in ('shell0/isl', 'GS-6/gsl', 'all_node_states'):
                 (preview_dir / folder).mkdir(parents=True)
             with (out / 'telemetry.jsonl').open('w') as log:
                 def apply(epoch):
-                    nonlocal routing
+                    nonlocal routing, previous_policy
                     controller._generate_topology_for_timestamp(epoch)
                     runtime = Path(controller.local_dir)
                     shell = json.loads((runtime / 'all_isl_positions' / f'{epoch}.json').read_text())
@@ -228,9 +273,18 @@ class Session:
                     update_tinyleo_link(str(preview_dir), epoch, deepcopy(controller.all_link_states),
                                         [shell], controller.gs_lat_long, controller.antenna_number, cells,
                                         controller.GS_cell, controller.link_count, {}, gateways, states)
-                    policy, routing = adapter.choose(states)
+                    if traffic is None:
+                        policy, routing = adapter.choose(states)
+                    else:
+                        routing = adapter.choose(states, epoch)
+                        policy = routing['policy']
                     controller.geopraphic_routing_policy = policy
                     controller.update_tinyleo_topology(epoch)
+                    if traffic is not None:
+                        traffic.advance(epoch, run_origin_unix, run_origin_mono)
+                        if epoch in (0, 20, 79, 80, 239, 240, 289, 290, 300) or policy != previous_policy:
+                            evidence.submit(epoch, routing, 'phase' if epoch in (0,20,79,80,239,240,289,290,300) else 'route-change')
+                        previous_policy = deepcopy(policy)
                 def emit(row):
                     row.update(_default_resource_sample(row['epoch']))
                     row['recorded_unix_s'] = time.time()
@@ -248,6 +302,7 @@ class Session:
                     with self.lock:
                         self.frames.append(frame)
                         self.state['frames'] = len(self.frames)
+                run_origin_unix, run_origin_mono = time.time(), time.monotonic()
                 run_seconds(301, apply, emit)
         except Exception as error:
             failure = str(error)
@@ -262,6 +317,19 @@ class Session:
                         ping.wait()
             if ping_file:
                 ping_file.close()
+            if traffic is not None:
+                traffic.close()
+                measurements = traffic.snapshot()
+                (out / 'flow-measurements.json').write_text(json.dumps(measurements, indent=2))
+                if measurements['errors']:
+                    failure = failure or '; '.join(measurements['errors'])
+                if not all(f.get('complete') for f in measurements['flows'].values()):
+                    failure = failure or 'Missing completed receiver measurements'
+            if evidence is not None:
+                evidence.close()
+                (out / 'evidence-status.json').write_text(json.dumps({
+                    'errors': evidence.errors, 'kernel_convergence_certified': False,
+                    'note': 'Raw kernel policies and counters require VM acceptance review'}))
         with self.lock:
             self.state.update(status='archiving', error=failure)
         try:
@@ -273,6 +341,12 @@ class Session:
             data = dict(schema_version=1, map=boundary, modes={algorithm:self.frames}, summary=summary, batches={},
                         continuous_ping=(out / 'ping-continuous.txt').read_text() if ping_file else '',
                         source=out.name)
+            if traffic is not None:
+                from competition_archive import build_competition_archive, runtime_digest
+                data = build_competition_archive(out, self.frames, self.competition_config,
+                    traffic.snapshot(), {'runtime_sha256': runtime_digest(ROOT)},
+                    algorithm=algorithm, boundary=boundary, error=failure)
+                summary = data['summary']
             (out / 'replay.json').write_text(json.dumps(data))
             (out / 'summary.json').write_text(json.dumps(summary, indent=2))
             archive = out.with_suffix('.zip')

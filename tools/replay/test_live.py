@@ -102,6 +102,23 @@ class LiveContractTests(unittest.TestCase):
         self.assertIsNone(session.out)
         self.assertEqual(session.state['status'], 'not_prepared')
 
+    def test_competition_profile_is_explicit_and_legacy_default_is_unchanged(self):
+        from live import Session
+        from test_competition import candidate
+        legacy = Session(Path('/unused'), Path('/unused'), Path('/unused'))
+        self.assertIsNone(legacy.competition_config)
+        with tempfile.TemporaryDirectory() as directory:
+            config = Path(directory) / 'scenario.json'
+            config.write_text(json.dumps(candidate()))
+            session = Session(Path('/unused'), Path('/unused'), Path('/unused'),
+                              competition_scenario=config, iperf_binary='/opt/tinyleo/iperf3')
+            self.assertEqual(len(session.competition_config['traffic_demands']), 3)
+            profile = session.profile_config({'satellite link bandwidth ("X" Gbps)': 200,
+                                              'sat-ground bandwidth ("X" Gbps)': 96})
+            self.assertEqual(profile['satellite link bandwidth ("X" Gbps)'], .01)
+            self.assertEqual(profile['sat-ground bandwidth ("X" Gbps)'], .1)
+            self.assertEqual(legacy.profile_config({'unchanged': True}), {'unchanged': True})
+
 
 if __name__ == '__main__':
     unittest.main()

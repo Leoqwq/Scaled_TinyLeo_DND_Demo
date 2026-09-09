@@ -195,6 +195,8 @@ def main():
     vm.add_argument('--routing-config', type=Path, required=True)
     vm.add_argument('--token-file', type=Path, required=True)
     vm.add_argument('--port', type=int, default=8766)
+    vm.add_argument('--competition-scenario', type=Path, help='Explicit multi-flow profile; requires manual node re-preparation')
+    vm.add_argument('--iperf-binary', default='iperf3', help='Competition requires a separate iperf3 >=3.20')
     local = sub.add_parser('local')
     local.add_argument('--remote', default='http://127.0.0.1:8767')
     local.add_argument('--token-file', type=Path, required=True)
@@ -209,7 +211,8 @@ def main():
         fd = os.open(args.token_file, os.O_WRONLY|os.O_CREAT|os.O_EXCL, 0o600)
         with os.fdopen(fd, 'w') as f:
             f.write(token)
-        backend = Session(args.root.resolve(), args.template.resolve(), args.routing_config.resolve())
+        backend = Session(args.root.resolve(), args.template.resolve(), args.routing_config.resolve(),
+                          competition_scenario=args.competition_scenario, iperf_binary=args.iperf_binary)
         backend.prepare()
         server = server_for(backend, token, args.port)
     else:
