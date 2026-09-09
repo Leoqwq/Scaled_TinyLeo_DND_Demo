@@ -3,3 +3,5 @@ __pycache__/
 *.py[cod]
 .venv/
 .worktrees/
+# Reproducible, potentially large offline feasibility evidence; summaries are in docs.
+tools/replay/results/

@@ -1,0 +1,11 @@
+{
+  "schema_version": 1,
+  "name": "canada-competition-candidate",
+  "grid_config": {"rows": 11, "cols": 11},
+  "shaping": {"isl_gbps": 0.01, "gsl_gbps": 0.1, "queue_packets": 1000, "udp_payload_bytes": 1000},
+  "traffic_demands": [
+    {"id": "c2-north", "source": 12, "destination": 14, "source_gs": "GS1", "destination_gs": "GS3", "priority": 5, "service_class": "C2", "demand_gbps": 0.004, "start_s": 20, "end_s": 290, "port": 5201},
+    {"id": "telemetry-east", "source": 13, "destination": 25, "source_gs": "GS2", "destination_gs": "GS6", "priority": 3, "service_class": "telemetry", "demand_gbps": 0.002, "start_s": 20, "end_s": 290, "port": 5202},
+    {"id": "bulk-cross", "source": 12, "destination": 25, "source_gs": "GS1", "destination_gs": "GS6", "priority": 1, "service_class": "bulk", "demand_gbps": 0.009, "start_s": 80, "end_s": 240, "port": 5203}
+  ]
+}
