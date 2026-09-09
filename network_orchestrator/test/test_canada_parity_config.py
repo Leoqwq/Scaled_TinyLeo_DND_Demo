@@ -61,6 +61,22 @@ def _base_config(**overrides):
     return config
 
 
+def test_submillisecond_delay_changes_are_applied_in_both_directions(tmp_path):
+    for folder in ('shell0/isl', 'GS-1/gsl'):
+        (tmp_path / folder).mkdir(parents=True)
+    for epoch, delay in enumerate((4.97, 5.03)):
+        states = {'SH1SAT1': {'isls': {}, 'gsls': {}},
+                  'SH1SAT2': {'isls': {}, 'gsls': {}}}
+        links = {'SH1SAT1-SH1SAT2': 5.0, 'GS1-SH1SAT1': 5.0}
+        sn_utils._update_tinyleo_link_files(
+            str(tmp_path), epoch,
+            [('shell0', ['SH1SAT1', 'SH1SAT2'], None, [[('SH1SAT2', delay)], []])],
+            [[('SH1SAT1', delay)]], [(49, -123)], links, 3, states,
+            {'SH1SAT1': [3, 2]}, {})
+        assert f'SH1SAT2,{delay:.2f}' in (tmp_path / f'shell0/isl/{epoch}.txt').read_text()
+        assert f'SH1SAT1,{delay:.2f}' in (tmp_path / f'GS-1/gsl/{epoch}.txt').read_text()
+
+
 def _write_config(root, payload, filename="config.json"):
     path = Path(root) / filename
     path.parent.mkdir(parents=True, exist_ok=True)

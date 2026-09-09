@@ -584,7 +584,7 @@ def _update_tinyleo_link_files(dir,ts,isl_per_shell,gsls,GS_lat_long,all_link_st
             for isl in isl_lst:
                 key = f'{sat_name_lst[sid]}-{isl[0]}'
                 if key in all_link_states:
-                    if isl[1] - all_link_states[key] > 1:
+                    if round(isl[1], 2) != round(all_link_states[key], 2):
                         update_lst.append(f"{isl[0]},{isl[1]:.2f}")
                         all_link_states[key] = isl[1]
                 else:
@@ -623,7 +623,7 @@ def _update_tinyleo_link_files(dir,ts,isl_per_shell,gsls,GS_lat_long,all_link_st
         for gsl in gsl_lst:
             key = f'{get_gs_name(gid)}-{gsl[0]}'
             if key in all_link_states:
-                if gsl[1] - all_link_states[key] > 1:
+                if round(gsl[1], 2) != round(all_link_states[key], 2):
                     update_lst.append(f"{gsl[0]},{gsl[1]:.2f}")
                     all_link_states[key] = gsl[1]
             else:
