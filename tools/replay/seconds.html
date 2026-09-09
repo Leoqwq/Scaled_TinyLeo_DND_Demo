@@ -1,0 +1,103 @@
+<!doctype html><html lang="en"><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>TinyLEO · Canada Live / Replay</title>
+<style>
+[hidden]{display:none!important}
+button:disabled,select:disabled{opacity:.45;cursor:not-allowed}#livePanel{margin-bottom:18px}#liveStatus{overflow-wrap:anywhere}
+*{box-sizing:border-box}body{margin:0;background:#09121c;color:#dae7ee;font:14px system-ui,sans-serif}main{max-width:1500px;margin:auto;padding:30px}header{display:flex;justify-content:space-between;align-items:center;margin-bottom:26px}h1{font-size:30px;font-weight:550;margin:8px 0}h2{font-size:16px;margin:0 0 14px}p{color:#9ab0bf;line-height:1.7}.eyebrow{color:#56dac4;letter-spacing:3px;font-size:11px}.badge{border:1px solid #466070;border-radius:30px;padding:7px 13px;color:#adc2d0}button,select{background:#172937;color:#e2f1f8;border:1px solid #385164;border-radius:8px;padding:10px 15px;cursor:pointer}button:hover{background:#254052}button:focus-visible,input:focus-visible,select:focus-visible{outline:2px solid #56dac4}.layout{display:grid;grid-template-columns:minmax(0,2.2fr) minmax(300px,1fr);gap:18px}.card{min-width:0;background:#0e1c29;border:1px solid #233747;border-radius:14px;padding:20px}.mapcard{padding:0;overflow:hidden}.maphead{display:flex;justify-content:space-between;padding:20px;gap:12px}svg{display:block;width:100%;height:auto}.legend{padding:16px 20px;color:#9ab0bf;font-size:12px}.legend span{margin-right:20px}.stats{display:grid;grid-template-columns:repeat(3,1fr);gap:10px;margin:18px 0}.stat{background:#142634;border-radius:8px;padding:12px}.stat b{display:block;font-size:23px;margin:6px 0}.stat small{color:#8fa9bb}.controls{display:flex;align-items:center;gap:14px;margin-bottom:18px}input[type=range]{flex:1;accent-color:#56dac4;min-width:80px}.event{padding:15px;border-left:3px solid #56dac4;background:#142634;line-height:1.7}.muted{color:#91a7b7;font-size:12px}.timeline{display:flex;flex-wrap:wrap;gap:5px;margin:18px 0}.timeline button{flex:1;min-width:45px;padding:9px 0}.timeline .selected{background:#56dac4;color:#081822}.timeline .failure{border-color:#f18378}pre{white-space:pre-wrap;overflow:auto;max-height:320px;font:12px/1.7 ui-monospace,monospace;background:#07121c;padding:14px;border-radius:8px}details{margin-top:15px}summary{cursor:pointer;color:#a6c4d6}.footer{overflow-wrap:anywhere;margin-top:20px;font-size:12px;color:#849dad;line-height:1.8}#nodeInfo{min-height:35px} @media(max-width:950px){.layout{grid-template-columns:1fr}main{padding:16px}header{align-items:flex-start;flex-wrap:wrap}.controls{flex-wrap:wrap}}
+</style>
+<main><header><div><div class="eyebrow">TINYLEO / NETWORK EMULATION</div><h1>Canada · Satellite Network</h1><p>96 satellites · 6 ground stations · 301 frames · 300 simulated seconds</p></div><span class="badge">● REPLAY · Recorded experiment</span></header>
+<div class="controls"><button id="replayMode">Replay</button><button id="liveMode">Live</button><button id="importButton">Import replay</button><input id="importReplay" type="file" accept=".json" hidden></div>
+<div id="livePanel" class="card" hidden><h2>Live experiment</h2><p>Nodes must be prepared manually on the VM. Start never creates or deletes nodes.</p><label>Routing algorithm <select id="liveAlgorithm"><option value="shortest_path">Shortest Path</option><option value="qos_priority">QoS Priority</option></select></label> <button id="startLive" disabled>Start emulation</button> <button id="replayLatest" disabled>Replay this run</button><p id="liveStatus">Connect through the local relay to use Live.</p><details><summary>Live activity log and routing decision</summary><pre id="liveLog">No live data yet.</pre></details></div>
+<div class="controls" id="replayControls"><button id="play">▶ Play</button><span id="algorithmLabel">Historical preset (shortest-labeled)</span><input id="epoch" aria-label="Epoch" type="range" min="0" max="300" value="0"><strong id="epochLabel"></strong><select id="speed" aria-label="Playback speed"><option value="1000">1 s / frame · 1×</option><option value="2000">2 s / frame · 0.5×</option></select></div>
+<div class="layout"><section class="card mapcard"><div class="maphead"><div><h2>Canada · Controller snapshots</h2><div id="counts" class="muted"></div></div><button id="view">Global view</button></div><svg id="map" viewBox="0 0 960 620" role="img" aria-label="Satellite positions and ISL / GSL topology"></svg><div class="legend"><span style="color:#56dac4">● Active satellites / ISL</span><span style="color:#526b7b">● Other satellites</span><span style="color:#ffc97d">◆ Ground stations / GSL</span></div><div id="nodeInfo" class="legend">Hover over a node or link for details.</div></section>
+<aside class="card"><div class="eyebrow">RECORDED STATE / EVERY SECOND</div><h2 style="margin-top:12px">Controller update timing</h2><div id="event" class="event"></div><div class="stats"><div class="stat"><small>Apply time</small><b id="apply"></b><small>ms · this frame</small></div><div class="stat"><small>Deadline misses</small><b id="misses"></b><small>whole run</small></div><div class="stat"><small>Memory used</small><b id="memory"></b><small>GiB · VM total</small></div></div><h2>GS4 Vancouver → GS6 Toronto</h2><p>Continuous ping · whole-run results (not per-frame RTT)</p><pre id="pingSummary"></pre><p id="sampleNote"></p><details><summary>Measurement batch: traceroute</summary><pre id="trace"></pre></details><details><summary>Measurement batch: ping</summary><pre id="ping"></pre></details><details><summary>Measurement batch: iperf</summary><pre id="iperf"></pre></details><details><summary>Full continuous ping log</summary><pre id="continuous"></pre></details></aside></div>
+<div class="timeline" id="timeline"></div><div class="footer">Live and recorded TinyLEO experiments. The embedded historical run used a preset path, not the new northbound algorithm adapter. Default: one recorded state every second, from t=0 to t=300 (301 frames). No interpolated or invented states. Playback pauses when the tab is hidden.<br>Map links are controller snapshots, not independent verification of kernel forwarding. Packet-measurement batches span multiple states and are labeled by their start time; they are not instantaneous measurements for the displayed frame. No traceroute path is overlaid. Live supports shortest_path and qos_priority. QoS costs are model estimates.<br>This is a TinyLEO-synthesized constellation, not SpaceX Starlink. Boundaries: johan/world.geo.json (Natural Earth).<br><span id="provenance"></span></div></main>
+<script id="data" type="application/json">__REPLAY_DATA__</script><script>
+let D=JSON.parse(document.getElementById('data').textContent),$=id=>document.getElementById(id);let epoch=0,mode=Object.keys(D.modes)[0],timer=null,globalView=false;
+const ns='http://www.w3.org/2000/svg';function el(tag,attrs,parent,text){const e=document.createElementNS(ns,tag);Object.entries(attrs).forEach(([k,v])=>e.setAttribute(k,v));if(text)e.textContent=text;parent.appendChild(e);return e}
+function render(){const f=D.modes[mode][epoch],svg=$('map');svg.replaceChildren();const bounds=globalView?[-180,180,-80,85]:[-155,-45,35,85];const project=(lon,lat)=>[(lon-bounds[0])/(bounds[1]-bounds[0])*960,620-(lat-bounds[2])/(bounds[3]-bounds[2])*620];
+for(let lon=-180;lon<=180;lon+=20){const [x]=project(lon,0);el('line',{x1:x,y1:0,x2:x,y2:620,stroke:'#1a2d3c'},svg)}for(let lat=-80;lat<=80;lat+=10){const [,y]=project(0,lat);el('line',{x1:0,y1:y,x2:960,y2:y,stroke:'#1a2d3c'},svg);el('text',{x:8,y:y-5,fill:'#496579','font-size':11},svg,lat+'°')}
+const geom=D.map.geometry;const polygons=geom.type==='MultiPolygon'?geom.coordinates:[geom.coordinates];for(const polygon of polygons){const d=polygon.map(ring=>ring.map((p,i)=>(i?'L':'M')+project(...p).join(',')).join(' ')+'Z').join(' ');el('path',{d,fill:'#182f3d',stroke:'#37556a','stroke-width':1,'fill-rule':'evenodd'},svg)}
+const active=new Set();f.links.forEach(l=>{active.add(l.a);active.add(l.b);const a=f.nodes[l.a],b=f.nodes[l.b];if(Math.abs(a[1]-b[1])>180)return;const [x1,y1]=project(a[1],a[0]),[x2,y2]=project(b[1],b[0]);const line=el('line',{x1,y1,x2,y2,stroke:l.kind==='gsls'?'#ffc97d':'#56dac4','stroke-opacity':.65,'stroke-width':l.kind==='gsls'?2:1.5},svg);el('title',{},line,`${l.a} ↔ ${l.b} · ${l.delay} ms`)});
+Object.entries(f.nodes).forEach(([name,p])=>{const [x,y]=project(p[1],p[0]);const gs=name.startsWith('GS');const node=el(gs?'rect':'circle',gs?{x:x-4,y:y-4,width:8,height:8,fill:'#ffc97d',transform:`rotate(45 ${x} ${y})`}:{cx:x,cy:y,r:active.has(name)?4:2.2,fill:active.has(name)?'#56dac4':'#526b7b'},svg);const info=`${name} · ${p[0].toFixed(3)}°, ${p[1].toFixed(3)}° · ${p[2]} km`;el('title',{},node,info);node.addEventListener('mouseenter',()=>$('nodeInfo').textContent=info);if(gs)el('text',{x:x+9,y:y-9,fill:'#ffd99e','font-size':12},svg,name)});
+
+const t=f.telemetry;const last=D.modes[mode].length-1;
+$('apply').textContent=(t.apply_duration_s*1000).toFixed(1);
+$('misses').textContent=D.summary.deadline_misses;
+$('memory').textContent=(t.system_memory_used_bytes/2**30).toFixed(1);
+$('event').textContent=`Simulation time: ${t.simulation_time_s}s · Applied at wall time ${t.wall_elapsed_s.toFixed(3)}s · ${t.deadline_missed?'Deadline missed':'Within 1-second deadline'}`;
+const batch=Math.max(...Object.keys(D.batches||{}).map(Number).filter(n=>n<=epoch));
+$('sampleNote').textContent=Number.isFinite(batch)?`Latest measurement batch started at t=${batch}s. Its ping, iperf and traceroute were collected sequentially across multiple states, not exactly at t=${epoch}s.`:'Live packet observations are shown in the continuous ping log. Routing cost estimates are not measured RTT.';
+for(const [id,kind] of [['trace','traceroute'],['ping','ping'],['iperf','iperf']])$(id).textContent=D.batches?.[batch]?.[kind]??'No batch measurement recorded.';
+$('counts').textContent=`${Object.keys(f.nodes).length} nodes · ${f.links.filter(l=>l.kind==='isls').length} ISLs · ${f.links.filter(l=>l.kind==='gsls').length} GSLs`;
+$('epochLabel').textContent=`t = ${epoch}s / ${last}s · Frame ${epoch+1} / ${last+1}`;
+$('epoch').max=last;$('epoch').value=epoch;
+document.querySelectorAll('#timeline button').forEach(b=>b.classList.toggle('selected',Number(b.dataset.epoch)===epoch));
+}
+function stop(){clearTimeout(timer);timer=null;$('play').textContent='▶ Play'}
+function tick(){epoch++;render();if(epoch===D.modes[mode].length-1){stop();return}timer=setTimeout(tick,Number($('speed').value))}
+function start(){if(epoch===D.modes[mode].length-1)epoch=0;render();$('play').textContent='Ⅱ Pause';timer=setTimeout(tick,Number($('speed').value))}
+$('play').onclick=()=>timer!==null?stop():start();
+$('epoch').oninput=e=>{stop();epoch=Number(e.target.value);render()};
+$('speed').onchange=()=>{if(timer!==null){stop();start()}};
+$('view').onclick=()=>{globalView=!globalView;$('view').textContent=globalView?'Canada view':'Global view';render()};
+document.addEventListener('visibilitychange',()=>{if(document.hidden)stop()});
+for(let i=0;i<=300;i+=30){const b=document.createElement('button');b.textContent=i+'s';b.dataset.epoch=i;b.setAttribute('aria-label',`Go to simulation time ${i} seconds`);b.onclick=()=>{stop();epoch=i;render()};$('timeline').appendChild(b)}
+$('continuous').textContent=D.continuous_ping;
+$('pingSummary').textContent=D.continuous_ping.trim().split('\n').slice(-2).join('\n');
+$('provenance').textContent='Source: '+D.source;
+render();
+</script><script>
+const LIVE_TOKEN='__LIVE_TOKEN__';
+let showingLive=false,liveRun=null,liveFrames=[],pollBusy=false,starting=false;
+const originalReplay=D;
+async function api(path,body){const r=await fetch(path,{method:body?'POST':'GET',headers:{'X-TinyLEO-Token':LIVE_TOKEN,'Content-Type':'application/json'},body:body?JSON.stringify(body):undefined});const value=await r.json();if(!r.ok)throw Error(value.error||r.statusText);return value}
+function loadReplay(data){
+ if(!data?.modes||!data.map)throw Error('Invalid replay file');
+ const key=Object.keys(data.modes)[0],frames=data.modes[key];
+ if(!Array.isArray(frames)||!frames.length||frames.some((f,i)=>!f.nodes||!Array.isArray(f.links)||f.telemetry?.epoch!==i))throw Error('Replay frames are missing or unordered');
+ stop();D=data;mode=key;epoch=0;
+ $('algorithmLabel').textContent=key==='shortest'?'Historical preset (shortest-labeled)':key==='qos_priority'?'QoS Priority':'Shortest Path';
+ $('continuous').textContent=D.continuous_ping||'No ping log';
+ $('pingSummary').textContent=(D.continuous_ping||'No ping log').trim().split('\n').slice(-2).join('\n');
+ $('provenance').textContent='Source: '+D.source;
+ $('timeline').replaceChildren();
+ const last=frames.length-1;
+ document.querySelector('header p').textContent=`96 satellites · 6 ground stations · ${frames.length} frames · ${last} simulated seconds`;
+ for(let i=0;i<=last;i+=Math.max(1,Math.ceil(last/10))){const b=document.createElement('button');b.textContent=i+'s';b.dataset.epoch=i;b.onclick=()=>{stop();epoch=i;render()};$('timeline').appendChild(b)}
+ render();
+}
+function showLive(value){stop();showingLive=value;$('livePanel').hidden=!value;$('replayControls').hidden=value;$('timeline').hidden=value;
+ document.querySelector('.badge').textContent=value?'● LIVE · VM telemetry':'● REPLAY · Recorded experiment';
+ if(!value)loadReplay(originalReplay);
+ else {$('map').replaceChildren();$('counts').textContent='Waiting for actual VM state';$('event').textContent='No live frame received yet';$('apply').textContent='—';$('memory').textContent='—';$('misses').textContent='—';for(const id of ['continuous','pingSummary','trace','ping','iperf','sampleNote','provenance'])$(id).textContent='Waiting for live data';document.querySelector('header p').textContent='96 satellites · 6 ground stations · 1-second target cadence';}
+}
+$('liveMode').onclick=()=>{showLive(true);poll()};
+$('replayMode').onclick=()=>showLive(false);
+$('importButton').onclick=()=>$('importReplay').click();
+$('importReplay').onchange=async e=>{try{const data=JSON.parse(await e.target.files[0].text());showLive(false);loadReplay(data)}catch(error){alert(error.message)}};
+$('replayLatest').onclick=async()=>{try{const r=await fetch('/replay',{headers:{'X-TinyLEO-Token':LIVE_TOKEN}});if(!r.ok)throw Error('Replay is not downloaded yet');const data=await r.json();showLive(false);loadReplay(data)}catch(error){$('liveStatus').textContent=error.message}};
+$('startLive').onclick=async()=>{starting=true;$('startLive').disabled=true;try{await api('/start',{algorithm:$('liveAlgorithm').value});liveFrames=[];liveRun=null;$('liveStatus').textContent='Starting…'}catch(error){$('liveStatus').textContent=error.message}finally{starting=false;poll()}};
+async function poll(){
+ if(pollBusy||location.protocol==='file:')return;
+ pollBusy=true;
+ try{
+  let v=await api('/state?after='+(liveFrames.length-1));
+  if(v.run_id!==liveRun){liveFrames=[];liveRun=v.run_id;v=await api('/state?after=-1')}
+  for(const f of v.new_frames||[])if(f.telemetry.epoch===liveFrames.length)liveFrames.push(f);
+  $('startLive').disabled=starting||!!v.connection_error||!(v.status==='ready'||(v.status==='completed'&&v.download==='saved'));
+  $('liveAlgorithm').disabled=$('startLive').disabled;
+  $('replayLatest').disabled=v.download!=='saved';
+  $('liveStatus').textContent=[v.status,'Frames: '+(v.frames||0)+'/301',v.download?'Archive: '+v.download:'',v.local_archive||'',v.error||'',v.connection_error||'',v.download_error||''].filter(Boolean).join(' · ');
+  if(showingLive&&liveFrames.length){
+   D={map:originalReplay.map,modes:{[v.algorithm]:liveFrames},summary:{deadline_misses:liveFrames.filter(f=>f.telemetry.deadline_missed).length},batches:{},source:v.run_id};
+   mode=v.algorithm;epoch=liveFrames.length-1;render();
+   $('provenance').textContent='Live run: '+v.run_id;
+   $('continuous').textContent=v.ping||'Waiting for ping output';
+   $('pingSummary').textContent=(v.ping||'Waiting for ping output').trim().split('\n').slice(-3).join('\n');
+   const f=liveFrames.at(-1);$('liveLog').textContent=JSON.stringify({time_s:f.telemetry.simulation_time_s,apply_ms:f.telemetry.apply_duration_s*1000,routing:f.routing},null,2)+'\n\n'+(v.log||'').slice(-4000)+'\n\n'+(v.ping||'').split('\n').slice(-8).join('\n');
+  }
+ }catch(error){$('startLive').disabled=true;$('liveStatus').textContent='Disconnected: '+error.message+' · Remote run is not stopped.'}finally{pollBusy=false}
+}
+setInterval(poll,1000);
+</script></html>

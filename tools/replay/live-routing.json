@@ -1,0 +1,7 @@
+{
+  "grid_config": {"rows": 11, "cols": 11},
+  "global_settings": {"isl_capacity_gbps": 200},
+  "traffic_demands": [{"source": 23, "destination": 25, "demand_gbps": 0.01,
+    "priority": 5, "service_class": "C2", "approx_hop_ms": 25,
+    "routing_policy": "qos_priority"}]
+}
