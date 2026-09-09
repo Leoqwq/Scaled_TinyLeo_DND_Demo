@@ -23,6 +23,11 @@
 
 ## File boundaries and execution checkpoints
 
+Progress/evidence: `2026-09-08-live-qos-progress.md` in this directory. Tasks
+1–3 implemented and locally verified; Tasks 4–8 pending. Work continues in
+the current directory at the user's request after responsibility-based baseline
+commits. No worktree or subagent is needed.
+
 1. `scenario.py`, `competition-routing.json`: validated demands, phases and shaping.
 2. `competition.py`: physical graph, capacity injection, multi-policy conversion; does not launch processes.
 3. `check_competition.py`: read ZIP snapshots, run existing algorithms, report feasibility and hashes.
@@ -40,7 +45,7 @@ All new modules live under `tools/replay/`. Tests use `test_competition.py`,
 **Files:** Create `tools/replay/scenario.py`, `tools/replay/competition-routing.json`, `tools/replay/test_competition.py`.
 **Interfaces:** `validate_scenario(config: dict) -> dict`; `active_demands(config: dict, second: float) -> list[dict]`; `phase_at(second: float) -> str`. Input demands retain northbound source/destination/demand_gbps/priority; add id, source_gs, destination_gs, start_s, end_s, port. Shaping uses `isl_gbps`, `gsl_gbps`, packet size and queue limit.
 
-- [ ] Write real validation tests. Literal boundary expectations:
+- [x] Write real validation tests. Literal boundary expectations:
   ```python
   self.assertEqual([d['id'] for d in active_demands(config, 19)], [])
   self.assertEqual([d['id'] for d in active_demands(config, 20)], ['c2-north', 'telemetry-east'])
@@ -51,19 +56,19 @@ All new modules live under `tools/replay/`. Tests use `test_competition.py`,
   Reject reverse duplicate cell pairs, duplicate IDs/ports, wrong GS mappings,
   nonfinite/nonpositive rates, unknown keys affecting unsupported route weights,
   and invalid phase bounds. Work from deep copies; input must not mutate.
-- [ ] Run `python -m unittest discover -s tools/replay -p test_competition.py -v`; observe missing feature failure.
-- [ ] Implement pure validation and phase scheduling. Initial rates and endpoints are those in the spec. Canonical JSON must omit algorithm when hashing shared inputs.
-- [ ] Rerun tests. Commit only these new files after reviewing changes.
+- [x] Run `python -m unittest discover -s tools/replay -p test_competition.py -v`; observe missing feature failure.
+- [x] Implement pure validation and phase scheduling. Initial rates and endpoints are those in the spec. Canonical JSON must omit algorithm when hashing shared inputs.
+- [x] Rerun tests. Commit only these new files after reviewing changes.
 
 ### Task 2: Actual-capacity multi-flow routing
 
 **Files:** Create `tools/replay/competition.py`; extend `test_competition.py`. Preserve old `live.py:RoutingAdapter` until the new runtime is ready.
 **Interfaces:** `PhysicalGraph(states: dict, capacity_gbps: float)` exposes adjacency, density and `capacity(a,b)`; `CompetitionRouter(config: dict, algorithm: str).choose(states: dict, second: float) -> dict` returns phase, flows, policy, edge_capacity_gbps and directed_load_gbps.
 
-- [ ] Add hand-checked six-cell ladder fixture with a single physical gateway on each boundary. Assert 2–3 satellites do not multiply a single gateway's capacity.
-- [ ] Add tests rejecting asymmetric links, parallel unverified gateways, missing routes, opposite-direction sharing, unknown algorithms and stale-path reuse. Assert aggregate policies contain every active demand and original input config is unchanged.
-- [ ] Assert C2 route `[12,13,14]` and equal-hop bulk alternatives are selected by actual imported `TinyLEONorthboundAPI`, not a mock solver. Mutations to priority ordering/reservations should fail this test.
-- [ ] Run tests red. Implement a local subclass overriding capacity/neighbor inputs only, keeping the original northbound weight/risk/priority/fallback code. Validate every returned path against active physical adjacency and unique unordered GS pairs.
+- [x] Add hand-checked six-cell ladder fixture with a single physical gateway on each boundary. Assert 2–3 satellites do not multiply a single gateway's capacity.
+- [x] Add tests rejecting asymmetric links, parallel unverified gateways, missing routes, opposite-direction sharing, unknown algorithms and stale-path reuse. Assert aggregate policies contain every active demand and original input config is unchanged.
+- [x] Assert C2 route `[12,13,14]` and equal-hop bulk alternatives are selected by actual imported `TinyLEONorthboundAPI`, not a mock solver. Mutations to priority ordering/reservations should fail this test.
+- [x] Run tests red. Implement localized capacity/neighbor input injection, keeping the original northbound weight/risk/priority/fallback code. Validate every returned path against active physical adjacency and unique unordered GS pairs.
   ```python
   api.get_neighbors = lambda cell: sorted(graph.adjacency.get(cell, ()))
   api._edge_capacity_gbps = graph.capacity
@@ -71,18 +76,18 @@ All new modules live under `tools/replay/`. Tests use `test_competition.py`,
   api.generate_traffic_matrix()
   ```
   The actual implementation must preserve original input and serialize capacities with stable edge keys; no solver rewrite.
-- [ ] Rerun all competition tests and the six old Live contract tests. Record any baseline dependency failures separately from regressions.
+- [x] Rerun all competition tests and the six old Live contract tests. Record any baseline dependency failures separately from regressions.
 
 ### Task 3: Full-epoch feasibility report (gate)
 
 **Files:** Create `tools/replay/check_competition.py`; extend `test_competition.py`. Output a new report under `tools/replay/results/`, never overwrite historical archives.
 **Interfaces:** `check_archive(archive: Path, config: dict) -> dict`; CLI accepts archive, `--scenario`, `--output`.
 
-- [ ] Test ZIP fixtures for missing/duplicate epochs and invalid snapshots; verify no archive member extraction to disk. Test threshold calculations with literal counts (80/160 differs = 50%).
-- [ ] Run tests red; implement sequential reads of snapshots 0..300, both algorithms at each timestamp, complete path/fallback/edge-load evidence and shared input hashes.
-- [ ] Derive alternate-corridor availability by removing a contested directed boundary from the baseline route and checking connectivity; do not equate every path difference with a bottleneck improvement. Store both per-frame data and counts.
-- [ ] Run against `TinyLeo_CA/outputs/53464db9114943deb01df8c22d7ebb4b.zip` with the spec's two-flow C2/bulk case first, then all three flows. Store all tested candidates. Require spec thresholds before locking a preset.
-- [ ] If the candidate fails, explain the exact failing invariant and calibrate only within approved endpoint/rate scope. If changing forwarding/model semantics is necessary, stop and get design approval. No performance claim follows from this gate alone.
+- [x] Test ZIP fixtures for missing/duplicate epochs and invalid snapshots; verify no archive member extraction to disk. Test threshold calculations with literal counts (80/160 differs = 50%).
+- [x] Run tests red; implement sequential reads of snapshots 0..300, both algorithms at each timestamp, complete path/fallback/edge-load evidence and shared input hashes.
+- [x] Derive alternate-corridor availability by removing a contested directed boundary from the baseline route and checking connectivity; do not equate every path difference with a bottleneck improvement. Store both per-frame data and counts.
+- [x] Run against `TinyLeo_CA/outputs/53464db9114943deb01df8c22d7ebb4b.zip` with the spec's two-flow C2/bulk case first, then all three flows. Store all tested candidates. Require spec thresholds before locking a preset.
+- [x] If the candidate fails, explain the exact failing invariant and calibrate only within approved endpoint/rate scope. If changing forwarding/model semantics is necessary, stop and get design approval. No performance claim follows from this gate alone. Both original candidates passed after handling out-of-region empty cell lists; no rate calibration was needed.
 
 ### Task 4: Owned real-traffic measurement lifecycle
 

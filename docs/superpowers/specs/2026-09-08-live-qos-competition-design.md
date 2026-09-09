@@ -80,9 +80,12 @@ when comparing to netem interface limits. These are a calibration candidate,
 not a validated or promised production preset.
 
 Expected mechanism to test: C2 takes 12–13–14. Bulk has equal-hop alternatives
-12–13–14–25 and 12–23–24–25. QoS can react to reservations on the northern
-corridor and use the southern corridor. Shortest-path tie-breaking is left
-unchanged. Telemetry supplies another independently measurable flow, but
+including 12–13–14–25, 12–13–24–25 and 12–23–24–25. QoS can react to reservations
+on the northern corridor and use the southern corridor. Source inspection
+during implementation confirmed existing `shortest_path` uses a density-weighted
+edge cost, not pure hop count; its weighting and tie-breaking are preserved.
+The six-cell unit fixture selects the middle crossing for bulk under that
+baseline. Telemetry supplies another independently measurable flow, but
 the two-flow C2/bulk case must work and be understood before enabling it.
 
 Run schedule uses simulation time and a monotonic wall clock:
