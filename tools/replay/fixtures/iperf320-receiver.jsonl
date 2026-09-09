@@ -1,0 +1,4 @@
+{"event":"start","data":{"version":"iperf 3.20","timestamp":{"timesecs":1788919040,"timemillisecs":1788919040598},"test_start":{"protocol":"UDP","num_streams":1,"blksize":1000,"duration":2}}}
+{"event":"interval","data":{"sum":{"start":0,"end":1.005056,"seconds":1.0050560235977173,"bytes":126000,"bits_per_second":1002929.1664675014,"jitter_ms":0.11793813685158762,"lost_packets":0,"packets":126,"lost_percent":0,"omitted":false,"sender":false}}}
+{"event":"interval","data":{"sum":{"start":1.005056,"end":2.005076,"seconds":1.0000200271606445,"bytes":125000,"bits_per_second":999979.97324043466,"jitter_ms":0.113035533905723,"lost_packets":0,"packets":125,"lost_percent":0,"omitted":false,"sender":false}}}
+{"event":"end","data":{"sum":{"bytes":0,"sender":false},"sum_received":{"start":0,"end":2.005499,"seconds":2.005499,"bytes":251000,"bits_per_second":1001247.0711777967,"jitter_ms":0.113035533905723,"lost_packets":0,"packets":251,"lost_percent":0,"sender":false}}}
