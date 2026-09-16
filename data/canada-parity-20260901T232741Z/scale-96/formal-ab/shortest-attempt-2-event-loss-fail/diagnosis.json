@@ -1,0 +1,14 @@
+{
+  "acceptance_valid": false,
+  "epoch_7_evidence": {
+    "loss_percent": 100.0,
+    "received": 0,
+    "transmitted": 500
+  },
+  "failed_gates": [
+    "failure_recovery"
+  ],
+  "ping_reply_gate_passed": true,
+  "preserved": true,
+  "root_cause": "watchdog handlers counted exactly two modified events instead of deduplicating state changes, allowing intermediate agents to miss route updates"
+}

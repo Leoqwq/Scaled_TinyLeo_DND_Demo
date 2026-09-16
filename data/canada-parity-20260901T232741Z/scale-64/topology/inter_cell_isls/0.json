@@ -1,0 +1,86 @@
+{
+  "SH1SAT50": {
+    "near_sat": "SH1SAT37",
+    "near_cell": [
+      2,
+      3
+    ]
+  },
+  "SH1SAT37": {
+    "near_sat": "SH1SAT50",
+    "near_cell": [
+      2,
+      2
+    ]
+  },
+  "SH1SAT64": {
+    "near_sat": "SH1SAT56",
+    "near_cell": [
+      3,
+      2
+    ]
+  },
+  "SH1SAT56": {
+    "near_sat": "SH1SAT64",
+    "near_cell": [
+      2,
+      2
+    ]
+  },
+  "SH1SAT30": {
+    "near_sat": "SH1SAT20",
+    "near_cell": [
+      3,
+      3
+    ]
+  },
+  "SH1SAT20": {
+    "near_sat": "SH1SAT30",
+    "near_cell": [
+      2,
+      3
+    ]
+  },
+  "SH1SAT59": {
+    "near_sat": "SH1SAT44",
+    "near_cell": [
+      3,
+      4
+    ]
+  },
+  "SH1SAT44": {
+    "near_sat": "SH1SAT59",
+    "near_cell": [
+      2,
+      4
+    ]
+  },
+  "SH1SAT35": {
+    "near_sat": "SH1SAT53",
+    "near_cell": [
+      3,
+      3
+    ]
+  },
+  "SH1SAT53": {
+    "near_sat": "SH1SAT35",
+    "near_cell": [
+      3,
+      2
+    ]
+  },
+  "SH1SAT38": {
+    "near_sat": "SH1SAT63",
+    "near_cell": [
+      3,
+      4
+    ]
+  },
+  "SH1SAT63": {
+    "near_sat": "SH1SAT38",
+    "near_cell": [
+      3,
+      3
+    ]
+  }
+}

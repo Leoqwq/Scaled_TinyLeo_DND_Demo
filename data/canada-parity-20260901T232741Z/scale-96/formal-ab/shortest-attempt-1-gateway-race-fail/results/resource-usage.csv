@@ -1,0 +1,13 @@
+epoch,process_rss_bytes,system_memory_total_bytes,system_memory_available_bytes,system_memory_used_bytes,system_memory_percent,swap_total_bytes,swap_used_bytes,swap_free_bytes,swap_percent,scope
+0,102981632,33651986432,24821112832,8830873600,26.2,0,0,0,0.0,controller process RSS plus host memory/swap counters; not n2 VM acceptance
+1,104529920,33651986432,24114339840,9537646592,28.3,0,0,0,0.0,controller process RSS plus host memory/swap counters; not n2 VM acceptance
+2,104554496,33651986432,24181161984,9470824448,28.1,0,0,0,0.0,controller process RSS plus host memory/swap counters; not n2 VM acceptance
+3,104996864,33651986432,24195579904,9456406528,28.1,0,0,0,0.0,controller process RSS plus host memory/swap counters; not n2 VM acceptance
+4,105021440,33651986432,24166481920,9485504512,28.2,0,0,0,0.0,controller process RSS plus host memory/swap counters; not n2 VM acceptance
+5,105029632,33651986432,24184397824,9467588608,28.1,0,0,0,0.0,controller process RSS plus host memory/swap counters; not n2 VM acceptance
+6,106061824,33651986432,24199364608,9452621824,28.1,0,0,0,0.0,controller process RSS plus host memory/swap counters; not n2 VM acceptance
+7,106070016,33651986432,24170438656,9481547776,28.2,0,0,0,0.0,controller process RSS plus host memory/swap counters; not n2 VM acceptance
+8,106115072,33651986432,24148447232,9503539200,28.2,0,0,0,0.0,controller process RSS plus host memory/swap counters; not n2 VM acceptance
+9,106450944,33651986432,24180490240,9471496192,28.1,0,0,0,0.0,controller process RSS plus host memory/swap counters; not n2 VM acceptance
+10,106446848,33651986432,24123023360,9528963072,28.3,0,0,0,0.0,controller process RSS plus host memory/swap counters; not n2 VM acceptance
+11,106450944,33651986432,24145965056,9506021376,28.2,0,0,0,0.0,controller process RSS plus host memory/swap counters; not n2 VM acceptance

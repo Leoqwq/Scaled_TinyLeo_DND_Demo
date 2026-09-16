@@ -1,0 +1,465 @@
+{
+  "events": [
+    {
+      "acknowledgement": {
+        "remote_acknowledgements": [
+          {
+            "agents": [
+              {
+                "name": "GS1",
+                "namespace_pid": 85721
+              },
+              {
+                "name": "GS2",
+                "namespace_pid": 85723
+              },
+              {
+                "name": "GS3",
+                "namespace_pid": 85725
+              },
+              {
+                "name": "GS4",
+                "namespace_pid": 85727
+              },
+              {
+                "name": "GS5",
+                "namespace_pid": 85729
+              },
+              {
+                "name": "GS6",
+                "namespace_pid": 85731
+              },
+              {
+                "name": "SH1SAT1",
+                "namespace_pid": 85529
+              },
+              {
+                "name": "SH1SAT10",
+                "namespace_pid": 85547
+              },
+              {
+                "name": "SH1SAT11",
+                "namespace_pid": 85549
+              },
+              {
+                "name": "SH1SAT12",
+                "namespace_pid": 85551
+              },
+              {
+                "name": "SH1SAT13",
+                "namespace_pid": 85553
+              },
+              {
+                "name": "SH1SAT14",
+                "namespace_pid": 85555
+              },
+              {
+                "name": "SH1SAT15",
+                "namespace_pid": 85557
+              },
+              {
+                "name": "SH1SAT16",
+                "namespace_pid": 85559
+              },
+              {
+                "name": "SH1SAT17",
+                "namespace_pid": 85561
+              },
+              {
+                "name": "SH1SAT18",
+                "namespace_pid": 85563
+              },
+              {
+                "name": "SH1SAT19",
+                "namespace_pid": 85565
+              },
+              {
+                "name": "SH1SAT2",
+                "namespace_pid": 85531
+              },
+              {
+                "name": "SH1SAT20",
+                "namespace_pid": 85567
+              },
+              {
+                "name": "SH1SAT21",
+                "namespace_pid": 85569
+              },
+              {
+                "name": "SH1SAT22",
+                "namespace_pid": 85571
+              },
+              {
+                "name": "SH1SAT23",
+                "namespace_pid": 85573
+              },
+              {
+                "name": "SH1SAT24",
+                "namespace_pid": 85575
+              },
+              {
+                "name": "SH1SAT25",
+                "namespace_pid": 85577
+              },
+              {
+                "name": "SH1SAT26",
+                "namespace_pid": 85579
+              },
+              {
+                "name": "SH1SAT27",
+                "namespace_pid": 85581
+              },
+              {
+                "name": "SH1SAT28",
+                "namespace_pid": 85583
+              },
+              {
+                "name": "SH1SAT29",
+                "namespace_pid": 85585
+              },
+              {
+                "name": "SH1SAT3",
+                "namespace_pid": 85533
+              },
+              {
+                "name": "SH1SAT30",
+                "namespace_pid": 85587
+              },
+              {
+                "name": "SH1SAT31",
+                "namespace_pid": 85589
+              },
+              {
+                "name": "SH1SAT32",
+                "namespace_pid": 85591
+              },
+              {
+                "name": "SH1SAT33",
+                "namespace_pid": 85593
+              },
+              {
+                "name": "SH1SAT34",
+                "namespace_pid": 85595
+              },
+              {
+                "name": "SH1SAT35",
+                "namespace_pid": 85597
+              },
+              {
+                "name": "SH1SAT36",
+                "namespace_pid": 85599
+              },
+              {
+                "name": "SH1SAT37",
+                "namespace_pid": 85601
+              },
+              {
+                "name": "SH1SAT38",
+                "namespace_pid": 85603
+              },
+              {
+                "name": "SH1SAT39",
+                "namespace_pid": 85605
+              },
+              {
+                "name": "SH1SAT4",
+                "namespace_pid": 85535
+              },
+              {
+                "name": "SH1SAT40",
+                "namespace_pid": 85607
+              },
+              {
+                "name": "SH1SAT41",
+                "namespace_pid": 85609
+              },
+              {
+                "name": "SH1SAT42",
+                "namespace_pid": 85611
+              },
+              {
+                "name": "SH1SAT43",
+                "namespace_pid": 85613
+              },
+              {
+                "name": "SH1SAT44",
+                "namespace_pid": 85615
+              },
+              {
+                "name": "SH1SAT45",
+                "namespace_pid": 85617
+              },
+              {
+                "name": "SH1SAT46",
+                "namespace_pid": 85619
+              },
+              {
+                "name": "SH1SAT47",
+                "namespace_pid": 85621
+              },
+              {
+                "name": "SH1SAT48",
+                "namespace_pid": 85623
+              },
+              {
+                "name": "SH1SAT49",
+                "namespace_pid": 85625
+              },
+              {
+                "name": "SH1SAT5",
+                "namespace_pid": 85537
+              },
+              {
+                "name": "SH1SAT50",
+                "namespace_pid": 85627
+              },
+              {
+                "name": "SH1SAT51",
+                "namespace_pid": 85629
+              },
+              {
+                "name": "SH1SAT52",
+                "namespace_pid": 85631
+              },
+              {
+                "name": "SH1SAT53",
+                "namespace_pid": 85633
+              },
+              {
+                "name": "SH1SAT54",
+                "namespace_pid": 85635
+              },
+              {
+                "name": "SH1SAT55",
+                "namespace_pid": 85637
+              },
+              {
+                "name": "SH1SAT56",
+                "namespace_pid": 85639
+              },
+              {
+                "name": "SH1SAT57",
+                "namespace_pid": 85641
+              },
+              {
+                "name": "SH1SAT58",
+                "namespace_pid": 85643
+              },
+              {
+                "name": "SH1SAT59",
+                "namespace_pid": 85645
+              },
+              {
+                "name": "SH1SAT6",
+                "namespace_pid": 85539
+              },
+              {
+                "name": "SH1SAT60",
+                "namespace_pid": 85647
+              },
+              {
+                "name": "SH1SAT61",
+                "namespace_pid": 85649
+              },
+              {
+                "name": "SH1SAT62",
+                "namespace_pid": 85651
+              },
+              {
+                "name": "SH1SAT63",
+                "namespace_pid": 85653
+              },
+              {
+                "name": "SH1SAT64",
+                "namespace_pid": 85655
+              },
+              {
+                "name": "SH1SAT65",
+                "namespace_pid": 85657
+              },
+              {
+                "name": "SH1SAT66",
+                "namespace_pid": 85659
+              },
+              {
+                "name": "SH1SAT67",
+                "namespace_pid": 85661
+              },
+              {
+                "name": "SH1SAT68",
+                "namespace_pid": 85663
+              },
+              {
+                "name": "SH1SAT69",
+                "namespace_pid": 85665
+              },
+              {
+                "name": "SH1SAT7",
+                "namespace_pid": 85541
+              },
+              {
+                "name": "SH1SAT70",
+                "namespace_pid": 85667
+              },
+              {
+                "name": "SH1SAT71",
+                "namespace_pid": 85669
+              },
+              {
+                "name": "SH1SAT72",
+                "namespace_pid": 85671
+              },
+              {
+                "name": "SH1SAT73",
+                "namespace_pid": 85673
+              },
+              {
+                "name": "SH1SAT74",
+                "namespace_pid": 85675
+              },
+              {
+                "name": "SH1SAT75",
+                "namespace_pid": 85677
+              },
+              {
+                "name": "SH1SAT76",
+                "namespace_pid": 85679
+              },
+              {
+                "name": "SH1SAT77",
+                "namespace_pid": 85681
+              },
+              {
+                "name": "SH1SAT78",
+                "namespace_pid": 85683
+              },
+              {
+                "name": "SH1SAT79",
+                "namespace_pid": 85685
+              },
+              {
+                "name": "SH1SAT8",
+                "namespace_pid": 85543
+              },
+              {
+                "name": "SH1SAT80",
+                "namespace_pid": 85687
+              },
+              {
+                "name": "SH1SAT81",
+                "namespace_pid": 85689
+              },
+              {
+                "name": "SH1SAT82",
+                "namespace_pid": 85691
+              },
+              {
+                "name": "SH1SAT83",
+                "namespace_pid": 85693
+              },
+              {
+                "name": "SH1SAT84",
+                "namespace_pid": 85695
+              },
+              {
+                "name": "SH1SAT85",
+                "namespace_pid": 85697
+              },
+              {
+                "name": "SH1SAT86",
+                "namespace_pid": 85699
+              },
+              {
+                "name": "SH1SAT87",
+                "namespace_pid": 85701
+              },
+              {
+                "name": "SH1SAT88",
+                "namespace_pid": 85703
+              },
+              {
+                "name": "SH1SAT89",
+                "namespace_pid": 85705
+              },
+              {
+                "name": "SH1SAT9",
+                "namespace_pid": 85545
+              },
+              {
+                "name": "SH1SAT90",
+                "namespace_pid": 85707
+              },
+              {
+                "name": "SH1SAT91",
+                "namespace_pid": 85709
+              },
+              {
+                "name": "SH1SAT92",
+                "namespace_pid": 85711
+              },
+              {
+                "name": "SH1SAT93",
+                "namespace_pid": 85713
+              },
+              {
+                "name": "SH1SAT94",
+                "namespace_pid": 85715
+              },
+              {
+                "name": "SH1SAT95",
+                "namespace_pid": 85717
+              },
+              {
+                "name": "SH1SAT96",
+                "namespace_pid": 85719
+              }
+            ],
+            "expected_count": 102,
+            "remote_id": 0,
+            "started_count": 102
+          }
+        ]
+      },
+      "epoch": 0,
+      "error": null,
+      "event": "srv6_deployment",
+      "status": "returned"
+    },
+    {
+      "acknowledgement": {
+        "epoch": 6,
+        "failed_link": [
+          "SH1SAT23",
+          "SH1SAT66"
+        ],
+        "remote_id": 0,
+        "removed_satellite": "SH1SAT23",
+        "replacement_satellite": "SH1SAT42",
+        "updated_satellites": [
+          "SH1SAT23",
+          "SH1SAT42",
+          "SH1SAT71",
+          "SH1SAT89"
+        ]
+      },
+      "epoch": 6,
+      "error": null,
+      "event": "failure_injection",
+      "interruption_seconds": 0.7747740830000112,
+      "status": "returned"
+    },
+    {
+      "epoch": 7,
+      "event": "recovery_observation",
+      "measurement_statuses": {
+        "iperf": "captured",
+        "ping": "captured",
+        "traceroute": "captured"
+      },
+      "note": "Observation status does not assert network recovery.",
+      "status": "measurement_attempted"
+    }
+  ],
+  "failure_epoch": 6,
+  "recovery_observation_epoch": 7
+}

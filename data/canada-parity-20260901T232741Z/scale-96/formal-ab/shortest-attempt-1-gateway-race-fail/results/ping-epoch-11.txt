@@ -1,0 +1,32 @@
+PING ce:3:ce:4:6::6(ce:3:ce:4:6::6) 56 data bytes
+[1788308911.985502] 64 bytes from ce:3:ce:4:6::6: icmp_seq=1 ttl=249 time=83.4 ms
+[1788308911.995678] 64 bytes from ce:3:ce:4:6::6: icmp_seq=2 ttl=249 time=83.5 ms
+[1788308912.005712] 64 bytes from ce:3:ce:4:6::6: icmp_seq=3 ttl=249 time=83.3 ms
+[1788308912.015924] 64 bytes from ce:3:ce:4:6::6: icmp_seq=4 ttl=249 time=83.4 ms
+[1788308912.026062] 64 bytes from ce:3:ce:4:6::6: icmp_seq=5 ttl=249 time=83.5 ms
+[1788308912.036095] 64 bytes from ce:3:ce:4:6::6: icmp_seq=6 ttl=249 time=83.4 ms
+[1788308912.046205] 64 bytes from ce:3:ce:4:6::6: icmp_seq=7 ttl=249 time=83.4 ms
+[1788308912.056300] 64 bytes from ce:3:ce:4:6::6: icmp_seq=8 ttl=249 time=83.4 ms
+[1788308912.066411] 64 bytes from ce:3:ce:4:6::6: icmp_seq=9 ttl=249 time=83.4 ms
+[1788308912.079033] 64 bytes from ce:3:ce:4:6::6: icmp_seq=10 ttl=249 time=83.4 ms
+[1788308912.089217] 64 bytes from ce:3:ce:4:6::6: icmp_seq=11 ttl=249 time=83.5 ms
+[1788308912.099257] 64 bytes from ce:3:ce:4:6::6: icmp_seq=12 ttl=249 time=83.4 ms
+[1788308912.109480] 64 bytes from ce:3:ce:4:6::6: icmp_seq=13 ttl=249 time=83.4 ms
+[1788308912.119586] 64 bytes from ce:3:ce:4:6::6: icmp_seq=14 ttl=249 time=83.4 ms
+[1788308912.129656] 64 bytes from ce:3:ce:4:6::6: icmp_seq=15 ttl=249 time=83.4 ms
+[1788308912.139777] 64 bytes from ce:3:ce:4:6::6: icmp_seq=16 ttl=249 time=83.4 ms
+[1788308912.149896] 64 bytes from ce:3:ce:4:6::6: icmp_seq=17 ttl=249 time=83.4 ms
+[1788308912.159936] 64 bytes from ce:3:ce:4:6::6: icmp_seq=18 ttl=249 time=83.4 ms
+[1788308912.172614] 64 bytes from ce:3:ce:4:6::6: icmp_seq=19 ttl=249 time=83.4 ms
+[1788308912.184497] 64 bytes from ce:3:ce:4:6::6: icmp_seq=20 ttl=249 time=83.4 ms
+[1788308912.194966] 64 bytes from ce:3:ce:4:6::6: icmp_seq=21 ttl=249 time=83.4 ms
+[1788308912.203038] 64 bytes from ce:3:ce:4:6::6: icmp_seq=22 ttl=249 time=83.4 ms
+[1788308912.215537] 64 bytes from ce:3:ce:4:6::6: icmp_seq=23 ttl=249 time=83.4 ms
+[1788308912.223213] 64 bytes from ce:3:ce:4:6::6: icmp_seq=24 ttl=249 time=83.4 ms
+[1788308912.233321] 64 bytes from ce:3:ce:4:6::6: icmp_seq=25 ttl=249 time=83.4 ms
+[1788308912.243302] 64 bytes from ce:3:ce:4:6::6: icmp_seq=26 ttl=249 time=83.3 ms
+[1788308912.253475] 64 bytes from ce:3:ce:4:6::6: icmp_seq=27 ttl=249 time=83.4 ms
+
+--- ce:3:ce:4:6::6 ping statistics ---
+500 packets transmitted, 27 received, 94.6% packet loss, time 5062ms
+rtt min/avg/max/mdev = 83.306/83.397/83.481/0.037 ms, pipe 9

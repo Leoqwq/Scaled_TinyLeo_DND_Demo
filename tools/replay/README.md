@@ -2,7 +2,8 @@
 
 For the project overview, see the [team guide](../../docs/team-guide.md).
 The `seconds.html` and `template.html` files are build templates, not ready-to-view
-demos. Complete real recordings and generated HTML are distributed separately.
+demos. Complete real recordings and ready-to-open HTML are included in
+[`data/`](../../data/README.md); start there for offline team review.
 A generated page also includes Compare for matched v2 replay JSON recordings;
 see [Live / Compare setup and status](LIVE.md).
 

@@ -1,0 +1,13 @@
+{
+  "actual_nodes": 96,
+  "all_updates_returned": true,
+  "command_status": "PASS",
+  "netns_cleanup_empty": true,
+  "p50_update_s": 0.7915590630000224,
+  "p95_update_s": 0.8178171552000094,
+  "pass": true,
+  "peak_swap_gib": 0.0,
+  "peak_used_gib": 8.76217269897461,
+  "process_cleanup_empty": true,
+  "runtime_rows": 3
+}

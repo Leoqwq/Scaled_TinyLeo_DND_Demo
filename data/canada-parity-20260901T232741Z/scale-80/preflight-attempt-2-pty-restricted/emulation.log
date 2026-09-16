@@ -1,0 +1,44 @@
+Predict topo data
+Total timestamps: 3
+Number of satellites: 80
+
+Processing all timestamps...
+Processing timestamps:   0%|          | 0/3 [00:00<?, ?it/s]Processing timestamps: 100%|██████████| 3/3 [00:00<00:00, 28.52it/s]Processing timestamps: 100%|██████████| 3/3 [00:00<00:00, 28.45it/s]
+Second phase matching completed: Processed 7 grid pairs, generated 7 ISL connections, time: 0.00s
+Intra-domain topology generation: Processed 6 grids, created 10 ring connections
+Second phase matching completed: Processed 4 grid pairs, generated 4 ISL connections, time: 0.00s
+Timestamp 1: Maintained 3 connections, created 4 new connections
+Intra-domain topology generation: Processed 6 grids, created 10 ring connections
+Second phase matching completed: Processed 4 grid pairs, generated 4 ISL connections, time: 0.00s
+Timestamp 2: Maintained 3 connections, created 4 new connections
+Intra-domain topology generation: Processed 6 grids, created 10 ring connections
+
+Total processing time: 0.11s
+
+Initializing nodes ...
+Removing containers and links...
+All containers and links remoted.
+Traceback (most recent call last):
+  File "/home/leo/TinyLEO/network_orchestrator/test/example_canada_parity.py", line 900, in <module>
+    raise SystemExit(main())
+  File "/home/leo/TinyLEO/network_orchestrator/test/example_canada_parity.py", line 885, in main
+    run_canada_parity(
+  File "/home/leo/TinyLEO/network_orchestrator/test/example_canada_parity.py", line 735, in run_canada_parity
+    controller.create_nodes()
+  File "/home/leo/TinyLEO/network_orchestrator/southbound/sn_controller.py", line 533, in create_nodes
+    remote.init_nodes()
+  File "/home/leo/TinyLEO/network_orchestrator/southbound/sn_controller.py", line 810, in init_nodes
+    self._resolve_remote_python_layout()
+  File "/home/leo/TinyLEO/network_orchestrator/southbound/sn_controller.py", line 762, in _resolve_remote_python_layout
+    output = sn_remote_wait_output(
+  File "/home/leo/TinyLEO/network_orchestrator/southbound/sn_utils.py", line 280, in sn_remote_wait_output
+    _stdin, stdout, stderr = remote_ssh.exec_command(
+  File "/home/leo/tinyleo-venv/lib/python3.10/site-packages/paramiko/client.py", line 550, in exec_command
+    chan.get_pty()
+  File "/home/leo/tinyleo-venv/lib/python3.10/site-packages/paramiko/channel.py", line 70, in _check
+    return func(self, *args, **kwds)
+  File "/home/leo/tinyleo-venv/lib/python3.10/site-packages/paramiko/channel.py", line 201, in get_pty
+    self._wait_for_event()
+  File "/home/leo/tinyleo-venv/lib/python3.10/site-packages/paramiko/channel.py", line 1224, in _wait_for_event
+    raise e
+paramiko.ssh_exception.SSHException: Channel closed.

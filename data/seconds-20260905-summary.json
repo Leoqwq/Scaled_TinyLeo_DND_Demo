@@ -1,0 +1,40 @@
+{
+  "expected_epochs": 301,
+  "completed_epochs": 301,
+  "deadline_misses": 0,
+  "max_apply_s": 0.7622944510000025,
+  "sample_interval_s": 1.0,
+  "measurement_start_epochs": [
+    0,
+    16,
+    33,
+    50,
+    67,
+    84,
+    101,
+    118,
+    135,
+    152,
+    186,
+    203,
+    220,
+    237,
+    254,
+    271,
+    288
+  ],
+  "valid_realtime": true,
+  "exact_second_axis": true,
+  "p50_apply_s": 0.6296469899999693,
+  "p95_apply_s": 0.6910095519999686,
+  "final_wall_elapsed_s": 300.63410804299997,
+  "max_start_lateness_s": 0.001975012999992032,
+  "peak_used_gib": 9.068763732910156,
+  "peak_swap_bytes": 0,
+  "continuous_ping": {
+    "transmitted": 304,
+    "received": 289,
+    "loss_percent": 4.93421
+  },
+  "timing_and_connectivity_pass": true
+}

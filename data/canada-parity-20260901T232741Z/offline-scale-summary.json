@@ -1,0 +1,57 @@
+{
+  "git_commit": "44d06971990e554b34c0136d55a2c08b3e28acde",
+  "run_root": "/home/leo/tinyleo-runs/canada-parity-20260901T232741Z",
+  "scales": {
+    "64": {
+      "available": true,
+      "candidate_count": 220768,
+      "coverage_ratio": 0.7,
+      "gateway_handover_count": 73,
+      "inter_epoch_files": 12,
+      "intra_epoch_files": 12,
+      "minimum_edge_disjoint_paths": 1,
+      "minimum_participating_largest_component_ratio": 1.0,
+      "path_epoch_ratio": 0.8333333333333334,
+      "selected_satellite_count": 64,
+      "stop_reason": "satellite_cap_reached",
+      "topology_change_count": 11,
+      "valid": true,
+      "validated_epochs": 12,
+      "validation_error_count": 0
+    },
+    "80": {
+      "available": true,
+      "candidate_count": 220768,
+      "coverage_ratio": 0.8375,
+      "gateway_handover_count": 74,
+      "inter_epoch_files": 12,
+      "intra_epoch_files": 12,
+      "minimum_edge_disjoint_paths": 2,
+      "minimum_participating_largest_component_ratio": 1.0,
+      "path_epoch_ratio": 1.0,
+      "selected_satellite_count": 80,
+      "stop_reason": "satellite_cap_reached",
+      "topology_change_count": 11,
+      "valid": true,
+      "validated_epochs": 12,
+      "validation_error_count": 0
+    },
+    "96": {
+      "available": true,
+      "candidate_count": 220768,
+      "coverage_ratio": 0.9375,
+      "gateway_handover_count": 74,
+      "inter_epoch_files": 12,
+      "intra_epoch_files": 12,
+      "minimum_edge_disjoint_paths": 2,
+      "minimum_participating_largest_component_ratio": 1.0,
+      "path_epoch_ratio": 1.0,
+      "selected_satellite_count": 96,
+      "stop_reason": "satellite_cap_reached",
+      "topology_change_count": 11,
+      "valid": true,
+      "validated_epochs": 12,
+      "validation_error_count": 0
+    }
+  }
+}

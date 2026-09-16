@@ -1,0 +1,33 @@
+{
+  "Duration (s)": 3,
+  "Link policy": "LeastDelay",
+  "Machines": [
+    {
+      "IP": "127.0.0.1",
+      "key_filename": "/home/leo/.ssh/tinyleo-localhost-ed25519",
+      "port": 22,
+      "username": "root"
+    }
+  ],
+  "Name": "tinyleo_canada_parity_preflight_scale_96",
+  "Satellite link": "Arbitrary",
+  "antenna elevation angle": 25,
+  "antenna number": 1,
+  "block_positions_file": "/home/leo/tinyleo-runs/canada-parity-20260901T232741Z/scale-96/artifacts/block_positions.json",
+  "enable_failure_recovery": true,
+  "execution_mode": "local",
+  "failure_controller_endpoint": "127.0.0.1:50051",
+  "grid_satellites_file": "/home/leo/tinyleo-runs/canada-parity-20260901T232741Z/scale-96/artifacts/canada_parity_grid_satellites.npy",
+  "num_epochs": 3,
+  "num_processes": 6,
+  "remote_python": "/home/leo/tinyleo-venv/bin/python",
+  "sat-ground bandwidth (\"X\" Gbps)": 96,
+  "sat-ground loss (\"X\"% )": 0,
+  "satellite link bandwidth (\"X\" Gbps)": 200,
+  "satellite link loss (\"X\"% )": 0,
+  "satellite_file": "/home/leo/tinyleo-runs/canada-parity-20260901T232741Z/scale-96/artifacts/canada_parity_satellite_data.npy",
+  "start_epoch": 0,
+  "topo_dir": "/home/leo/tinyleo-runs/canada-parity-20260901T232741Z/scale-96/topology",
+  "topology_update_interval_s": 20,
+  "traffic_matrix_file": "/home/leo/tinyleo-runs/canada-parity-20260901T232741Z/scale-96/artifacts/canada_parity_traffic_matrix.npy"
+}

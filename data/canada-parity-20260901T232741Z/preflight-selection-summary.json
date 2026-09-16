@@ -1,0 +1,51 @@
+{
+  "scale_64": {
+    "pass": false,
+    "reason": "first-three-epoch path ratio 0.667 is below 0.800"
+  },
+  "scale_80": {
+    "attempt_1_pass": {
+      "actual_nodes": 80,
+      "all_updates_returned": true,
+      "command_status": "PASS",
+      "netns_cleanup_empty": true,
+      "p50_update_s": 0.8007145339997805,
+      "p95_update_s": 0.8239265537001756,
+      "pass": true,
+      "peak_swap_gib": 0.0,
+      "peak_used_gib": 7.521781921386719,
+      "process_cleanup_empty": true,
+      "runtime_rows": 3
+    }
+  },
+  "scale_96": {
+    "attempt_1_pass": {
+      "actual_nodes": 96,
+      "all_updates_returned": true,
+      "command_status": "PASS",
+      "netns_cleanup_empty": true,
+      "p50_update_s": 0.7915590630000224,
+      "p95_update_s": 0.8178171552000094,
+      "pass": true,
+      "peak_swap_gib": 0.0,
+      "peak_used_gib": 8.76217269897461,
+      "process_cleanup_empty": true,
+      "runtime_rows": 3
+    },
+    "attempt_2_pass": {
+      "actual_nodes": 96,
+      "all_updates_returned": true,
+      "command_status": "PASS",
+      "netns_cleanup_empty": true,
+      "p50_update_s": 0.7523006060000625,
+      "p95_update_s": 0.8088178303996756,
+      "pass": true,
+      "peak_swap_gib": 0.0,
+      "peak_used_gib": 8.782634735107422,
+      "process_cleanup_empty": true,
+      "runtime_rows": 3
+    }
+  },
+  "selected_scale": 96,
+  "selection_reason": "96 passed two complete privileged preflights"
+}

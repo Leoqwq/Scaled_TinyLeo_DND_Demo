@@ -1,0 +1,12 @@
+Traceback (most recent call last):
+  File "/home/leo/TinyLEO/network_orchestrator/test/example_canada_parity.py", line 900, in <module>
+    raise SystemExit(main())
+  File "/home/leo/TinyLEO/network_orchestrator/test/example_canada_parity.py", line 885, in main
+    run_canada_parity(
+  File "/home/leo/TinyLEO/network_orchestrator/test/example_canada_parity.py", line 666, in run_canada_parity
+    validate_scenario_inputs(
+  File "/home/leo/TinyLEO/network_orchestrator/test/example_canada_parity.py", line 297, in validate_scenario_inputs
+    diversity = validate_path_diversity(
+  File "/home/leo/TinyLEO/network_orchestrator/test/example_canada_parity.py", line 119, in validate_path_diversity
+    raise ValueError(
+ValueError: report.path_epoch_ratio 0.667 is below 0.800

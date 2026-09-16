@@ -2,6 +2,8 @@
 
 ## Start here
 
+- [Offline data and replay](../data/README.md): bundled real recordings, standalone demo, run index and checksums; no VM access required.
+
 - [Team guide / 组员导览](team-guide.md): project scope, code reading order, local checks and data requirements.
 - [GitHub sharing](github-sharing.md): fork versus branch, preserving history and publishing this checkout.
 - [Replay](../tools/replay/README.md): generated browser demos and offline recording import.

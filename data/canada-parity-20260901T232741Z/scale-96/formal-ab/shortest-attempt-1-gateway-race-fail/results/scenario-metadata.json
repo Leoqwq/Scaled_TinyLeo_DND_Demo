@@ -1,0 +1,16 @@
+{
+  "applied_policy": {
+    "[3, 2]->[3, 4]": [
+      [
+        3,
+        3
+      ]
+    ]
+  },
+  "destination": "GS6",
+  "failure_epoch": 6,
+  "num_epochs": 12,
+  "recovery_observation_epoch": 7,
+  "routing_mode": "shortest",
+  "source": "GS4"
+}

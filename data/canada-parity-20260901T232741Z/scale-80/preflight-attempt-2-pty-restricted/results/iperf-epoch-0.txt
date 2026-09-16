@@ -1,0 +1,3 @@
+STATUS: MISSING
+source: /home/leo/tinyleo-runs/canada-parity-20260901T232741Z/scale-80/tinyleo_canada_parity_preflight_scale_80-Arbitrary-LeastDelay/result/iperf-epoch-0.txt
+Measurement was scheduled but not attempted before the run ended.

@@ -1,0 +1,125 @@
+{
+  "fixed_artifact_manifest_sha256": "8323a4bd0d69b5989c4b1ba8e0ffe3e73c51a035d3f10374186837a712174f42",
+  "geographic": {
+    "failure_identity": {
+      "failed_link": [
+        "SH1SAT23",
+        "SH1SAT66"
+      ],
+      "remote_id": 0,
+      "removed_satellite": "SH1SAT23",
+      "replacement_satellite": "SH1SAT42"
+    },
+    "failure_recovery_interruption_seconds": 0.7747740830000112,
+    "failure_schedule": {
+      "failure_epoch": 6,
+      "recovery_observation_epoch": 7
+    },
+    "flow": {
+      "destination": "GS6",
+      "source": "GS4"
+    },
+    "mean_latency_ms": 68.5515,
+    "mean_loss_percent": 21.919999999999998,
+    "mean_traceroute_hops": 8.0,
+    "per_epoch": {
+      "0": {
+        "average_latency_ms": 55.331,
+        "loss_percent": 9.6,
+        "received": 452,
+        "traceroute_hops": 1
+      },
+      "11": {
+        "average_latency_ms": 46.097,
+        "loss_percent": 0.0,
+        "received": 500,
+        "traceroute_hops": 9
+      },
+      "5": {
+        "average_latency_ms": 81.624,
+        "loss_percent": 0.0,
+        "received": 500,
+        "traceroute_hops": 12
+      },
+      "6": {
+        "average_latency_ms": null,
+        "loss_percent": 100.0,
+        "received": 0,
+        "traceroute_hops": 6
+      },
+      "7": {
+        "average_latency_ms": 91.154,
+        "loss_percent": 0.0,
+        "received": 500,
+        "traceroute_hops": 12
+      }
+    },
+    "routing_mode": "geographic",
+    "validated_peak_process_rss_bytes": 106729472,
+    "validated_recovery_ping_loss_percent": 0.0
+  },
+  "geographic_minus_shortest": {
+    "failure_recovery_interruption_seconds": -0.005757457000072463,
+    "mean_latency_ms": 6.7187000000000054,
+    "mean_loss_percent": 14.759999999999998,
+    "mean_traceroute_hops": 2.8
+  },
+  "shortest": {
+    "failure_identity": {
+      "failed_link": [
+        "SH1SAT23",
+        "SH1SAT66"
+      ],
+      "remote_id": 0,
+      "removed_satellite": "SH1SAT23",
+      "replacement_satellite": "SH1SAT42"
+    },
+    "failure_recovery_interruption_seconds": 0.7805315400000836,
+    "failure_schedule": {
+      "failure_epoch": 6,
+      "recovery_observation_epoch": 7
+    },
+    "flow": {
+      "destination": "GS6",
+      "source": "GS4"
+    },
+    "mean_latency_ms": 61.8328,
+    "mean_loss_percent": 7.159999999999999,
+    "mean_traceroute_hops": 5.2,
+    "per_epoch": {
+      "0": {
+        "average_latency_ms": 50.309,
+        "loss_percent": 35.8,
+        "received": 321,
+        "traceroute_hops": 2
+      },
+      "11": {
+        "average_latency_ms": 88.599,
+        "loss_percent": 0.0,
+        "received": 500,
+        "traceroute_hops": 8
+      },
+      "5": {
+        "average_latency_ms": 58.213,
+        "loss_percent": 0.0,
+        "received": 500,
+        "traceroute_hops": 5
+      },
+      "6": {
+        "average_latency_ms": 66.096,
+        "loss_percent": 0.0,
+        "received": 500,
+        "traceroute_hops": 6
+      },
+      "7": {
+        "average_latency_ms": 45.947,
+        "loss_percent": 0.0,
+        "received": 500,
+        "traceroute_hops": 5
+      }
+    },
+    "routing_mode": "shortest",
+    "validated_peak_process_rss_bytes": 106754048,
+    "validated_recovery_ping_loss_percent": 0.0
+  }
+}

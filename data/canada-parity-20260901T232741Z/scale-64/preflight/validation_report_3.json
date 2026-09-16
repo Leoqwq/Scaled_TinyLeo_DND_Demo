@@ -1,0 +1,89 @@
+{
+  "epochs": [
+    {
+      "active_grid_counts": {
+        "12": 3,
+        "13": 3,
+        "14": 1,
+        "23": 5,
+        "24": 5,
+        "25": 2
+      },
+      "added_links": 0,
+      "average_degree": 0.40625,
+      "component_count": 53,
+      "constellation_largest_component_ratio": 0.1875,
+      "edge_disjoint_paths": 1,
+      "epoch": 0,
+      "gateway_handovers": 0,
+      "inter_link_count": 6,
+      "intra_link_count": 7,
+      "largest_component_ratio": 1.0,
+      "link_count": 13,
+      "max_degree": 3,
+      "min_degree": 0,
+      "participating_satellite_count": 12,
+      "removed_links": 0,
+      "satellite_count": 64
+    },
+    {
+      "active_grid_counts": {
+        "12": 4,
+        "13": 6,
+        "14": 3,
+        "23": 4,
+        "24": 5,
+        "25": 2
+      },
+      "added_links": 13,
+      "average_degree": 0.53125,
+      "component_count": 51,
+      "constellation_largest_component_ratio": 0.21875,
+      "edge_disjoint_paths": 2,
+      "epoch": 1,
+      "gateway_handovers": 7,
+      "inter_link_count": 7,
+      "intra_link_count": 10,
+      "largest_component_ratio": 1.0,
+      "link_count": 17,
+      "max_degree": 3,
+      "min_degree": 0,
+      "participating_satellite_count": 14,
+      "removed_links": 9,
+      "satellite_count": 64
+    },
+    {
+      "active_grid_counts": {
+        "12": 4,
+        "13": 6,
+        "14": 4,
+        "23": 5,
+        "24": 6,
+        "25": 5
+      },
+      "added_links": 15,
+      "average_degree": 0.53125,
+      "component_count": 51,
+      "constellation_largest_component_ratio": 0.21875,
+      "edge_disjoint_paths": 2,
+      "epoch": 2,
+      "gateway_handovers": 7,
+      "inter_link_count": 7,
+      "intra_link_count": 10,
+      "largest_component_ratio": 1.0,
+      "link_count": 17,
+      "max_degree": 3,
+      "min_degree": 0,
+      "participating_satellite_count": 14,
+      "removed_links": 15,
+      "satellite_count": 64
+    }
+  ],
+  "errors": [],
+  "expected_epochs": 3,
+  "gateway_handover_count": 14,
+  "path_epoch_ratio": 0.6666666666666666,
+  "satellite_count": 64,
+  "topology_change_count": 2,
+  "valid": true
+}

@@ -1,0 +1,14 @@
+Traceback (most recent call last):
+  File "/home/leo/TinyLEO/network_orchestrator/test/example_canada_parity.py", line 900, in <module>
+    raise SystemExit(main())
+  File "/home/leo/TinyLEO/network_orchestrator/test/example_canada_parity.py", line 885, in main
+    run_canada_parity(
+  File "/home/leo/TinyLEO/network_orchestrator/test/example_canada_parity.py", line 718, in run_canada_parity
+    controller = controller_factory(
+  File "/home/leo/TinyLEO/network_orchestrator/test/example_canada_parity.py", line 332, in _default_controller_factory
+    from southbound.sn_controller import RemoteController
+  File "/home/leo/TinyLEO/network_orchestrator/southbound/sn_controller.py", line 21, in <module>
+    from southbound.sn_utils import *
+  File "/home/leo/TinyLEO/network_orchestrator/southbound/sn_utils.py", line 20, in <module>
+    from link_failure_grpc import link_failure_pb2,link_failure_pb2_grpc
+ImportError: cannot import name 'link_failure_pb2' from 'link_failure_grpc' (unknown location)

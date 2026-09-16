@@ -1,0 +1,2 @@
+epoch,phase,source,destination,status,source_path,artifact_path,size_bytes
+0,normal,GS4,GS6,captured,/home/leo/tinyleo-runs/canada-parity-20260901T232741Z/scale-96/tinyleo_canada_parity_preflight_scale_96-Arbitrary-LeastDelay/result/iperf-epoch-0.txt,/home/leo/tinyleo-runs/canada-parity-20260901T232741Z/scale-96/preflight/results/iperf-epoch-0.txt,67

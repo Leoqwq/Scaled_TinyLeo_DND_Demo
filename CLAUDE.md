@@ -9,6 +9,7 @@
 - Full emulation requires a prepared Linux VM; local tests do not certify it.
 - Treat `docs/superpowers/` as dated design and evidence, not a current task queue.
 - Keep measured packet results, model estimates, and synthetic fixtures distinct.
-- Keep experiment outputs and machine credentials outside tracked source.
+- Shared experiment recordings belong in `data/`; preserve raw evidence and checksums.
+- Keep machine credentials outside tracked source.
 - Inspect existing uncommitted work before edits; do not overwrite it.
 - Deployment and traffic experiments have external effects; follow the requested scope.

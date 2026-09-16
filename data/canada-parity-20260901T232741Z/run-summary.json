@@ -1,0 +1,51 @@
+{
+  "coverage_ratio": 0.9375,
+  "epochs": 12,
+  "failure_identity": {
+    "failed_link": [
+      "SH1SAT23",
+      "SH1SAT66"
+    ],
+    "remote_id": 0,
+    "removed_satellite": "SH1SAT23",
+    "replacement_satellite": "SH1SAT42"
+  },
+  "failure_schedule": {
+    "failure_epoch": 6,
+    "recovery_observation_epoch": 7
+  },
+  "fixed_artifact_manifest_sha256": "8323a4bd0d69b5989c4b1ba8e0ffe3e73c51a035d3f10374186837a712174f42",
+  "gateway_handovers": 74,
+  "geographic": {
+    "failure_recovery_interruption_seconds": 0.7747740830000112,
+    "mean_latency_ms": 68.5515,
+    "mean_loss_percent": 21.919999999999998,
+    "mean_traceroute_hops": 8.0,
+    "peak_process_rss_bytes": 106729472,
+    "peak_system_memory_bytes": 9518313472,
+    "recovery_ping_loss_percent": 0.0,
+    "valid": true
+  },
+  "git_commit": "437b4b6e6917352fa36d9d931785751cf032d1a0",
+  "ground_station_nodes": 6,
+  "path_epoch_ratio": 1.0,
+  "preserved_failed_attempts": [
+    "scale-96/formal-ab/shortest-attempt-1-gateway-race-fail",
+    "scale-96/formal-ab/shortest-attempt-2-event-loss-fail"
+  ],
+  "satellite_nodes": 96,
+  "selected_scale": 96,
+  "shortest": {
+    "failure_recovery_interruption_seconds": 0.7805315400000836,
+    "mean_latency_ms": 61.8328,
+    "mean_loss_percent": 7.159999999999999,
+    "mean_traceroute_hops": 5.2,
+    "peak_process_rss_bytes": 106754048,
+    "peak_system_memory_bytes": 9526190080,
+    "recovery_ping_loss_percent": 0.0,
+    "valid": true
+  },
+  "topology_changes": 11,
+  "total_emulated_nodes": 102,
+  "valid": true
+}

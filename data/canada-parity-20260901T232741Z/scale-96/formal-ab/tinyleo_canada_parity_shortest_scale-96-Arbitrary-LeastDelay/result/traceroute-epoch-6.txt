@@ -1,0 +1,7 @@
+traceroute to ce:3:ce:4:6::6 (ce:3:ce:4:6::6), 128 hops max, 80 byte packets
+ 1  ce:3:ce:2:4:0:aaaa:22 (ce:3:ce:2:4:0:aaaa:22)  7.343 ms
+ 2  aaaa:7:aaaa:22::10 (aaaa:7:aaaa:22::10)  14.058 ms
+ 3  aaaa:3:aaaa:7::10 (aaaa:3:aaaa:7::10)  35.056 ms
+ 4  aaaa:3:aaaa:27::40 (aaaa:3:aaaa:27::40)  34.720 ms
+ 5  aaaa:10:aaaa:27::10 (aaaa:10:aaaa:27::10)  65.411 ms
+ 6  ce:3:ce:4:6::6 (ce:3:ce:4:6::6)  66.400 ms

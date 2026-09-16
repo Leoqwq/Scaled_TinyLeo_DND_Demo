@@ -42,12 +42,16 @@ cd Scaled_TinyLeo_DND_Demo
 **To browse the project**, start with the [team guide](docs/team-guide.md).
 It maps the source files to the experiment workflow and includes local test commands.
 
-**To watch a recorded demo**, obtain the generated `tinyleo-compare.html` and
-matched recordings from the experiment owner. A page with embedded recordings
-can be opened directly in a browser. Full experiment archives and the generated
-demo are distributed separately from this source repository.
-The files `tools/replay/seconds.html` and `template.html` are build templates;
-see the [Replay guide](tools/replay/README.md) for building a historical replay.
+**To watch a recorded demo**, download or clone this repository and open
+[`data/compare-20260909/tinyleo-compare.html`](data/compare-20260909/tinyleo-compare.html)
+in a desktop browser. It already embeds a real Shortest Path / QoS Priority pair;
+press **Play** in Compare to begin. No Google Cloud access, VM, SSH, or Python is
+needed. GitHub previews HTML as source, so open the downloaded file locally.
+
+All 16 saved runs, raw archives, and historical experiment outputs are included
+in [`data/`](data/README.md) (about 498 MiB). Follow the
+[offline replay guide](data/README.md) to import other recordings or check hashes.
+Use Replay/Compare for team review; Live requires the experiment owner's VM access.
 
 **To run an experiment**, follow the [one-second workflow](docs/second-resolution-emulation.md)
 and [Live setup](tools/replay/LIVE.md). Full emulation requires a prepared Linux
@@ -74,6 +78,7 @@ browser fixtures test interface behavior and are not performance evidence.
 | [`network_orchestrator/`](network_orchestrator/) | TinyLEO routing, MPC, southbound and SRv6 code, with emulation and validation adaptations |
 | [`tools/`](tools/) | Preparation, execution, and checking of one-second runs |
 | [`tools/replay/`](tools/replay/) | Live relay, traffic collection, recording, replay, and comparison UI |
+| [`data/`](data/README.md) | Offline demo, recorded runs, raw archives, and integrity checksums |
 | [`docs/`](docs/README.md) | Guides, runbooks, and dated design/validation records |
 
 The [12-epoch Canada runbook](docs/canada-parity-runbook.md) is retained as a

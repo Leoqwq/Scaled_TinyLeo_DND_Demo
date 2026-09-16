@@ -1,0 +1,26 @@
+{
+  "acceptance_valid": false,
+  "epoch_7_offline_path": [
+    "SH1SAT83",
+    "SH1SAT43",
+    "SH1SAT36",
+    "SH1SAT45"
+  ],
+  "epoch_7_ping_received": 0,
+  "failed_gates": [
+    "ping_reply",
+    "failure_recovery"
+  ],
+  "failed_link": [
+    "SH1SAT10",
+    "SH1SAT27"
+  ],
+  "failure_epoch": 6,
+  "preserved": true,
+  "removed_satellite": "SH1SAT10",
+  "removed_satellite_had_gsl": "GS6",
+  "root_causes": [
+    "failure selection allowed a satellite carrying a ground-station link",
+    "measurement commands started before the configured convergence wait"
+  ]
+}

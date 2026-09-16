@@ -1,0 +1,21 @@
+{
+  "candidate_count": 220768,
+  "coverage_ratio": 0.7,
+  "requested_scale": 64,
+  "selected_satellite_count": 64,
+  "stop_reason": "satellite_cap_reached",
+  "window": [
+    0,
+    1,
+    2,
+    3,
+    4,
+    5,
+    6,
+    7,
+    8,
+    9,
+    10,
+    11
+  ]
+}

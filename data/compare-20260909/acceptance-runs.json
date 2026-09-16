@@ -1,0 +1,32 @@
+[
+  {
+    "algorithm": "shortest_path",
+    "run_id": "27241ed67b124bec98114f5acba5c3fc",
+    "replay": "/Users/leo/Desktop/Obsidian/Satellite/TinyLeo/TinyLeo_CA/outputs/2026-09-08_19-58-24_shortest_path/27241ed67b124bec98114f5acba5c3fc.replay.json",
+    "summary": {
+      "algorithm": "shortest_path",
+      "expected_epochs": 301,
+      "completed_epochs": 301,
+      "deadline_misses": 0,
+      "error": null,
+      "measurement_complete": true,
+      "comparison_eligible": true,
+      "status": "completed"
+    }
+  },
+  {
+    "algorithm": "qos_priority",
+    "run_id": "dac7c802b96343fb992c4ade04924066",
+    "replay": "/Users/leo/Desktop/Obsidian/Satellite/TinyLeo/TinyLeo_CA/outputs/2026-09-08_20-03-33_qos_priority/dac7c802b96343fb992c4ade04924066.replay.json",
+    "summary": {
+      "algorithm": "qos_priority",
+      "expected_epochs": 301,
+      "completed_epochs": 301,
+      "deadline_misses": 0,
+      "error": null,
+      "measurement_complete": true,
+      "comparison_eligible": true,
+      "status": "completed"
+    }
+  }
+]

@@ -1,0 +1,373 @@
+Predict topo data
+Total timestamps: 12
+Number of satellites: 96
+
+Processing all timestamps...
+Processing timestamps:   0%|          | 0/12 [00:00<?, ?it/s]Processing timestamps:  25%|██▌       | 3/12 [00:00<00:00, 26.24it/s]Processing timestamps:  58%|█████▊    | 7/12 [00:00<00:00, 32.05it/s]Processing timestamps:  92%|█████████▏| 11/12 [00:00<00:00, 30.88it/s]Processing timestamps: 100%|██████████| 12/12 [00:00<00:00, 32.10it/s]
+Second phase matching completed: Processed 7 grid pairs, generated 7 ISL connections, time: 0.00s
+Intra-domain topology generation: Processed 6 grids, created 10 ring connections
+Second phase matching completed: Processed 3 grid pairs, generated 3 ISL connections, time: 0.00s
+Timestamp 1: Maintained 4 connections, created 3 new connections
+Intra-domain topology generation: Processed 6 grids, created 10 ring connections
+Second phase matching completed: Processed 6 grid pairs, generated 6 ISL connections, time: 0.00s
+Timestamp 2: Maintained 1 connections, created 6 new connections
+Intra-domain topology generation: Processed 6 grids, created 10 ring connections
+Second phase matching completed: Processed 4 grid pairs, generated 4 ISL connections, time: 0.00s
+Timestamp 3: Maintained 3 connections, created 4 new connections
+Intra-domain topology generation: Processed 6 grids, created 10 ring connections
+Second phase matching completed: Processed 5 grid pairs, generated 5 ISL connections, time: 0.00s
+Timestamp 4: Maintained 2 connections, created 5 new connections
+Intra-domain topology generation: Processed 6 grids, created 10 ring connections
+Second phase matching completed: Processed 4 grid pairs, generated 4 ISL connections, time: 0.00s
+Timestamp 5: Maintained 3 connections, created 4 new connections
+Intra-domain topology generation: Processed 6 grids, created 10 ring connections
+Second phase matching completed: Processed 5 grid pairs, generated 5 ISL connections, time: 0.00s
+Timestamp 6: Maintained 2 connections, created 5 new connections
+Intra-domain topology generation: Processed 6 grids, created 10 ring connections
+Second phase matching completed: Processed 7 grid pairs, generated 7 ISL connections, time: 0.00s
+Timestamp 7: Maintained 0 connections, created 7 new connections
+Intra-domain topology generation: Processed 6 grids, created 10 ring connections
+Second phase matching completed: Processed 6 grid pairs, generated 6 ISL connections, time: 0.00s
+Timestamp 8: Maintained 1 connections, created 6 new connections
+Intra-domain topology generation: Processed 6 grids, created 10 ring connections
+Second phase matching completed: Processed 5 grid pairs, generated 5 ISL connections, time: 0.00s
+Timestamp 9: Maintained 2 connections, created 5 new connections
+Intra-domain topology generation: Processed 6 grids, created 10 ring connections
+Second phase matching completed: Processed 4 grid pairs, generated 4 ISL connections, time: 0.00s
+Timestamp 10: Maintained 3 connections, created 4 new connections
+Intra-domain topology generation: Processed 6 grids, created 10 ring connections
+Second phase matching completed: Processed 5 grid pairs, generated 5 ISL connections, time: 0.00s
+Timestamp 11: Maintained 2 connections, created 5 new connections
+Intra-domain topology generation: Processed 6 grids, created 10 ring connections
+
+Total processing time: 0.38s
+
+Initializing nodes ...
+TINYLEO_PYTHON_LAYOUT={"base_prefix": "/usr", "executable": "/home/leo/tinyleo-venv/bin/python", "prefix": "/home/leo/tinyleo-venv"}
+[0] shell 0: 96 satellites initialized
+[0] GS: GS1,GS2,GS3,GS4,GS5,GS6
+Node initialization: 1.1258974075317383 s consumed.
+
+Initializing links ...
+[0] Shell 0: 171 added.
+Dump was interrupted and may be inconsistent.
+Link initialization: 1.7037315368652344 s consumed.
+
+Link faliure server is running on port 50051...
+
+I0902 01:00:17.858927   85377 fork_posix.cc:71] Other threads are currently calling into gRPC, skipping fork() handlers
+I0902 01:00:17.863306   85377 fork_posix.cc:71] Other threads are currently calling into gRPC, skipping fork() handlers
+I0902 01:00:17.867356   85377 fork_posix.cc:71] Other threads are currently calling into gRPC, skipping fork() handlers
+I0902 01:00:17.871291   85377 fork_posix.cc:71] Other threads are currently calling into gRPC, skipping fork() handlers
+I0902 01:00:17.875201   85377 fork_posix.cc:71] Other threads are currently calling into gRPC, skipping fork() handlers
+I0902 01:00:17.879234   85377 fork_posix.cc:71] Other threads are currently calling into gRPC, skipping fork() handlers
+Second phase matching completed: Processed 7 grid pairs, generated 7 ISL connections, time: 0.00s
+Intra-domain topology generation: Processed 6 grids, created 10 ring connections
+
+Timestamp 0 topology generation time statistics (ms):
+  Data access time: 0.99ms
+  Inter-domain topology generation: 60.05ms (99.7%)
+  Intra-domain topology generation: 0.16ms (0.3%)
+  Total topology generation time: 60.21ms
+  Total timestamp processing time: 92.45ms
+
+Update networks at t 0...
+[0] shell 0: 96 Satellites state update!
+[0] GS: 6 GSs state update!
+[0] Shell 0: 0 deleted, 0 updated, 0 added.
+[0] GSL: 0 deleted, 0 updated, 6 added.
+0.6249575614929199 s for network update
+
+Deploy srv6 agent...
+TINYLEO_SRV6_DEPLOY_ACK={"agents": [{"name": "GS1", "namespace_pid": 85721}, {"name": "GS2", "namespace_pid": 85723}, {"name": "GS3", "namespace_pid": 85725}, {"name": "GS4", "namespace_pid": 85727}, {"name": "GS5", "namespace_pid": 85729}, {"name": "GS6", "namespace_pid": 85731}, {"name": "SH1SAT1", "namespace_pid": 85529}, {"name": "SH1SAT10", "namespace_pid": 85547}, {"name": "SH1SAT11", "namespace_pid": 85549}, {"name": "SH1SAT12", "namespace_pid": 85551}, {"name": "SH1SAT13", "namespace_pid": 85553}, {"name": "SH1SAT14", "namespace_pid": 85555}, {"name": "SH1SAT15", "namespace_pid": 85557}, {"name": "SH1SAT16", "namespace_pid": 85559}, {"name": "SH1SAT17", "namespace_pid": 85561}, {"name": "SH1SAT18", "namespace_pid": 85563}, {"name": "SH1SAT19", "namespace_pid": 85565}, {"name": "SH1SAT2", "namespace_pid": 85531}, {"name": "SH1SAT20", "namespace_pid": 85567}, {"name": "SH1SAT21", "namespace_pid": 85569}, {"name": "SH1SAT22", "namespace_pid": 85571}, {"name": "SH1SAT23", "namespace_pid": 85573}, {"name": "SH1SAT24", "namespace_pid": 85575}, {"name": "SH1SAT25", "namespace_pid": 85577}, {"name": "SH1SAT26", "namespace_pid": 85579}, {"name": "SH1SAT27", "namespace_pid": 85581}, {"name": "SH1SAT28", "namespace_pid": 85583}, {"name": "SH1SAT29", "namespace_pid": 85585}, {"name": "SH1SAT3", "namespace_pid": 85533}, {"name": "SH1SAT30", "namespace_pid": 85587}, {"name": "SH1SAT31", "namespace_pid": 85589}, {"name": "SH1SAT32", "namespace_pid": 85591}, {"name": "SH1SAT33", "namespace_pid": 85593}, {"name": "SH1SAT34", "namespace_pid": 85595}, {"name": "SH1SAT35", "namespace_pid": 85597}, {"name": "SH1SAT36", "namespace_pid": 85599}, {"name": "SH1SAT37", "namespace_pid": 85601}, {"name": "SH1SAT38", "namespace_pid": 85603}, {"name": "SH1SAT39", "namespace_pid": 85605}, {"name": "SH1SAT4", "namespace_pid": 85535}, {"name": "SH1SAT40", "namespace_pid": 85607}, {"name": "SH1SAT41", "namespace_pid": 85609}, {"name": "SH1SAT42", "namespace_pid": 85611}, {"name": "SH1SAT43", "namespace_pid": 85613}, {"name": "SH1SAT44", "namespace_pid": 85615}, {"name": "SH1SAT45", "namespace_pid": 85617}, {"name": "SH1SAT46", "namespace_pid": 85619}, {"name": "SH1SAT47", "namespace_pid": 85621}, {"name": "SH1SAT48", "namespace_pid": 85623}, {"name": "SH1SAT49", "namespace_pid": 85625}, {"name": "SH1SAT5", "namespace_pid": 85537}, {"name": "SH1SAT50", "namespace_pid": 85627}, {"name": "SH1SAT51", "namespace_pid": 85629}, {"name": "SH1SAT52", "namespace_pid": 85631}, {"name": "SH1SAT53", "namespace_pid": 85633}, {"name": "SH1SAT54", "namespace_pid": 85635}, {"name": "SH1SAT55", "namespace_pid": 85637}, {"name": "SH1SAT56", "namespace_pid": 85639}, {"name": "SH1SAT57", "namespace_pid": 85641}, {"name": "SH1SAT58", "namespace_pid": 85643}, {"name": "SH1SAT59", "namespace_pid": 85645}, {"name": "SH1SAT6", "namespace_pid": 85539}, {"name": "SH1SAT60", "namespace_pid": 85647}, {"name": "SH1SAT61", "namespace_pid": 85649}, {"name": "SH1SAT62", "namespace_pid": 85651}, {"name": "SH1SAT63", "namespace_pid": 85653}, {"name": "SH1SAT64", "namespace_pid": 85655}, {"name": "SH1SAT65", "namespace_pid": 85657}, {"name": "SH1SAT66", "namespace_pid": 85659}, {"name": "SH1SAT67", "namespace_pid": 85661}, {"name": "SH1SAT68", "namespace_pid": 85663}, {"name": "SH1SAT69", "namespace_pid": 85665}, {"name": "SH1SAT7", "namespace_pid": 85541}, {"name": "SH1SAT70", "namespace_pid": 85667}, {"name": "SH1SAT71", "namespace_pid": 85669}, {"name": "SH1SAT72", "namespace_pid": 85671}, {"name": "SH1SAT73", "namespace_pid": 85673}, {"name": "SH1SAT74", "namespace_pid": 85675}, {"name": "SH1SAT75", "namespace_pid": 85677}, {"name": "SH1SAT76", "namespace_pid": 85679}, {"name": "SH1SAT77", "namespace_pid": 85681}, {"name": "SH1SAT78", "namespace_pid": 85683}, {"name": "SH1SAT79", "namespace_pid": 85685}, {"name": "SH1SAT8", "namespace_pid": 85543}, {"name": "SH1SAT80", "namespace_pid": 85687}, {"name": "SH1SAT81", "namespace_pid": 85689}, {"name": "SH1SAT82", "namespace_pid": 85691}, {"name": "SH1SAT83", "namespace_pid": 85693}, {"name": "SH1SAT84", "namespace_pid": 85695}, {"name": "SH1SAT85", "namespace_pid": 85697}, {"name": "SH1SAT86", "namespace_pid": 85699}, {"name": "SH1SAT87", "namespace_pid": 85701}, {"name": "SH1SAT88", "namespace_pid": 85703}, {"name": "SH1SAT89", "namespace_pid": 85705}, {"name": "SH1SAT9", "namespace_pid": 85545}, {"name": "SH1SAT90", "namespace_pid": 85707}, {"name": "SH1SAT91", "namespace_pid": 85709}, {"name": "SH1SAT92", "namespace_pid": 85711}, {"name": "SH1SAT93", "namespace_pid": 85713}, {"name": "SH1SAT94", "namespace_pid": 85715}, {"name": "SH1SAT95", "namespace_pid": 85717}, {"name": "SH1SAT96", "namespace_pid": 85719}], "expected_count": 102, "remote_id": 0, "started_count": 102}
+2.3840885162353516 s for srv6 agent deploy
+
+I0902 01:00:49.584243   85377 fork_posix.cc:71] Other threads are currently calling into gRPC, skipping fork() handlers
+I0902 01:00:49.588782   85377 fork_posix.cc:71] Other threads are currently calling into gRPC, skipping fork() handlers
+I0902 01:00:49.593022   85377 fork_posix.cc:71] Other threads are currently calling into gRPC, skipping fork() handlers
+I0902 01:00:49.596949   85377 fork_posix.cc:71] Other threads are currently calling into gRPC, skipping fork() handlers
+I0902 01:00:49.600937   85377 fork_posix.cc:71] Other threads are currently calling into gRPC, skipping fork() handlers
+I0902 01:00:49.604621   85377 fork_posix.cc:71] Other threads are currently calling into gRPC, skipping fork() handlers
+Getting topology for timestamp 0 from cache
+Second phase matching completed: Processed 3 grid pairs, generated 3 ISL connections, time: 0.00s
+Timestamp 1: Maintained 4 connections, created 3 new connections
+Intra-domain topology generation: Processed 6 grids, created 10 ring connections
+
+Timestamp 1 topology generation time statistics (ms):
+  Data access time: 1.02ms
+  Inter-domain topology generation: 61.77ms (99.8%)
+  Intra-domain topology generation: 0.13ms (0.2%)
+  Total topology generation time: 61.91ms
+  Total timestamp processing time: 91.61ms
+
+Update networks at t 1...
+[0] shell 0: 96 Satellites state update!
+[0] GS: 6 GSs state update!
+[0] Shell 0: 0 deleted, 0 updated, 0 added.
+[0] GSL: 0 deleted, 0 updated, 6 added.
+0.8987488746643066 s for network update
+
+I0902 01:01:09.603652   85377 fork_posix.cc:71] Other threads are currently calling into gRPC, skipping fork() handlers
+I0902 01:01:09.607952   85377 fork_posix.cc:71] Other threads are currently calling into gRPC, skipping fork() handlers
+I0902 01:01:09.612014   85377 fork_posix.cc:71] Other threads are currently calling into gRPC, skipping fork() handlers
+I0902 01:01:09.616704   85377 fork_posix.cc:71] Other threads are currently calling into gRPC, skipping fork() handlers
+I0902 01:01:09.620985   85377 fork_posix.cc:71] Other threads are currently calling into gRPC, skipping fork() handlers
+I0902 01:01:09.625114   85377 fork_posix.cc:71] Other threads are currently calling into gRPC, skipping fork() handlers
+Getting topology for timestamp 1 from cache
+Second phase matching completed: Processed 6 grid pairs, generated 6 ISL connections, time: 0.00s
+Timestamp 2: Maintained 1 connections, created 6 new connections
+Intra-domain topology generation: Processed 6 grids, created 10 ring connections
+
+Timestamp 2 topology generation time statistics (ms):
+  Data access time: 1.09ms
+  Inter-domain topology generation: 62.88ms (99.8%)
+  Intra-domain topology generation: 0.13ms (0.2%)
+  Total topology generation time: 63.02ms
+  Total timestamp processing time: 93.72ms
+
+Update networks at t 2...
+[0] shell 0: 96 Satellites state update!
+[0] GS: 6 GSs state update!
+[0] Shell 0: 0 deleted, 0 updated, 0 added.
+[0] GSL: 0 deleted, 0 updated, 6 added.
+0.8102748394012451 s for network update
+
+I0902 01:01:29.622911   85377 fork_posix.cc:71] Other threads are currently calling into gRPC, skipping fork() handlers
+I0902 01:01:29.627365   85377 fork_posix.cc:71] Other threads are currently calling into gRPC, skipping fork() handlers
+I0902 01:01:29.631540   85377 fork_posix.cc:71] Other threads are currently calling into gRPC, skipping fork() handlers
+I0902 01:01:29.635643   85377 fork_posix.cc:71] Other threads are currently calling into gRPC, skipping fork() handlers
+I0902 01:01:29.639522   85377 fork_posix.cc:71] Other threads are currently calling into gRPC, skipping fork() handlers
+I0902 01:01:29.643999   85377 fork_posix.cc:71] Other threads are currently calling into gRPC, skipping fork() handlers
+Getting topology for timestamp 2 from cache
+Second phase matching completed: Processed 4 grid pairs, generated 4 ISL connections, time: 0.00s
+Timestamp 3: Maintained 3 connections, created 4 new connections
+Intra-domain topology generation: Processed 6 grids, created 10 ring connections
+
+Timestamp 3 topology generation time statistics (ms):
+  Data access time: 1.02ms
+  Inter-domain topology generation: 23.60ms (99.1%)
+  Intra-domain topology generation: 0.21ms (0.9%)
+  Total topology generation time: 23.81ms
+  Total timestamp processing time: 54.79ms
+
+Update networks at t 3...
+[0] shell 0: 96 Satellites state update!
+[0] GS: 6 GSs state update!
+[0] Shell 0: 0 deleted, 2 updated, 0 added.
+[0] GSL: 0 deleted, 0 updated, 5 added.
+0.8920373916625977 s for network update
+
+I0902 01:01:49.642122   85377 fork_posix.cc:71] Other threads are currently calling into gRPC, skipping fork() handlers
+I0902 01:01:49.646737   85377 fork_posix.cc:71] Other threads are currently calling into gRPC, skipping fork() handlers
+I0902 01:01:49.651114   85377 fork_posix.cc:71] Other threads are currently calling into gRPC, skipping fork() handlers
+I0902 01:01:49.655338   85377 fork_posix.cc:71] Other threads are currently calling into gRPC, skipping fork() handlers
+I0902 01:01:49.659794   85377 fork_posix.cc:71] Other threads are currently calling into gRPC, skipping fork() handlers
+I0902 01:01:49.664035   85377 fork_posix.cc:71] Other threads are currently calling into gRPC, skipping fork() handlers
+Getting topology for timestamp 3 from cache
+Second phase matching completed: Processed 5 grid pairs, generated 5 ISL connections, time: 0.00s
+Timestamp 4: Maintained 2 connections, created 5 new connections
+Intra-domain topology generation: Processed 6 grids, created 10 ring connections
+
+Timestamp 4 topology generation time statistics (ms):
+  Data access time: 1.14ms
+  Inter-domain topology generation: 63.11ms (99.8%)
+  Intra-domain topology generation: 0.15ms (0.2%)
+  Total topology generation time: 63.27ms
+  Total timestamp processing time: 94.82ms
+
+Update networks at t 4...
+[0] shell 0: 96 Satellites state update!
+[0] GS: 6 GSs state update!
+[0] Shell 0: 0 deleted, 2 updated, 0 added.
+[0] GSL: 0 deleted, 0 updated, 6 added.
+0.825206995010376 s for network update
+
+I0902 01:02:09.661655   85377 fork_posix.cc:71] Other threads are currently calling into gRPC, skipping fork() handlers
+I0902 01:02:09.666197   85377 fork_posix.cc:71] Other threads are currently calling into gRPC, skipping fork() handlers
+I0902 01:02:09.670569   85377 fork_posix.cc:71] Other threads are currently calling into gRPC, skipping fork() handlers
+I0902 01:02:09.675405   85377 fork_posix.cc:71] Other threads are currently calling into gRPC, skipping fork() handlers
+I0902 01:02:09.679873   85377 fork_posix.cc:71] Other threads are currently calling into gRPC, skipping fork() handlers
+I0902 01:02:09.684125   85377 fork_posix.cc:71] Other threads are currently calling into gRPC, skipping fork() handlers
+Getting topology for timestamp 4 from cache
+Second phase matching completed: Processed 4 grid pairs, generated 4 ISL connections, time: 0.00s
+Timestamp 5: Maintained 3 connections, created 4 new connections
+Intra-domain topology generation: Processed 6 grids, created 10 ring connections
+
+Timestamp 5 topology generation time statistics (ms):
+  Data access time: 1.07ms
+  Inter-domain topology generation: 64.04ms (99.8%)
+  Intra-domain topology generation: 0.14ms (0.2%)
+  Total topology generation time: 64.18ms
+  Total timestamp processing time: 96.53ms
+
+Update networks at t 5...
+[0] shell 0: 96 Satellites state update!
+[0] GS: 6 GSs state update!
+[0] Shell 0: 0 deleted, 2 updated, 0 added.
+[0] GSL: 0 deleted, 0 updated, 6 added.
+0.870110273361206 s for network update
+
+I0902 01:02:36.718613   85377 fork_posix.cc:71] Other threads are currently calling into gRPC, skipping fork() handlers
+I0902 01:02:36.723004   85377 fork_posix.cc:71] Other threads are currently calling into gRPC, skipping fork() handlers
+I0902 01:02:36.727097   85377 fork_posix.cc:71] Other threads are currently calling into gRPC, skipping fork() handlers
+I0902 01:02:36.731196   85377 fork_posix.cc:71] Other threads are currently calling into gRPC, skipping fork() handlers
+I0902 01:02:36.735493   85377 fork_posix.cc:71] Other threads are currently calling into gRPC, skipping fork() handlers
+I0902 01:02:36.739453   85377 fork_posix.cc:71] Other threads are currently calling into gRPC, skipping fork() handlers
+Getting topology for timestamp 5 from cache
+Second phase matching completed: Processed 5 grid pairs, generated 5 ISL connections, time: 0.00s
+Timestamp 6: Maintained 2 connections, created 5 new connections
+Intra-domain topology generation: Processed 6 grids, created 10 ring connections
+
+Timestamp 6 topology generation time statistics (ms):
+  Data access time: 1.13ms
+  Inter-domain topology generation: 23.30ms (99.2%)
+  Intra-domain topology generation: 0.20ms (0.8%)
+  Total topology generation time: 23.50ms
+  Total timestamp processing time: 54.17ms
+
+Update networks at t 6...
+[0] shell 0: 96 Satellites state update!
+[0] GS: 6 GSs state update!
+[0] Shell 0: 0 deleted, 1 updated, 0 added.
+[0] GSL: 0 deleted, 0 updated, 5 added.
+0.8470087051391602 s for network update
+
+fault test ...
+Handling link failure between SH1SAT23 and SH1SAT66
+Link failure between SH1SAT23 and SH1SAT66
+Detected inter-domain link failure: Satellite 22-Satellite 65, affecting grids (np.int64(13), np.int64(14))
+Inter-domain link repair: Using satellite 41 to replace satellite 22
+remove sat SH1SAT23 replace sat SH1SAT42
+update sats: 4 {'SH1SAT71', 'SH1SAT23', 'SH1SAT89', 'SH1SAT42'}
+[0] shell 0: 4 Satellites state update!
+[0] Shell 0: 0 deleted, 0 updated, 3 added.
+TINYLEO_FAILURE_ACK={"epoch": 6, "failed_link": ["SH1SAT23", "SH1SAT66"], "remote_id": 0, "removed_satellite": "SH1SAT23", "replacement_satellite": "SH1SAT42", "updated_satellites": ["SH1SAT23", "SH1SAT42", "SH1SAT71", "SH1SAT89"]}
+0.7747445106506348 s for fault test
+
+I0902 01:05:07.776608   85377 fork_posix.cc:71] Other threads are currently calling into gRPC, skipping fork() handlers
+I0902 01:05:07.781187   85377 fork_posix.cc:71] Other threads are currently calling into gRPC, skipping fork() handlers
+I0902 01:05:07.785674   85377 fork_posix.cc:71] Other threads are currently calling into gRPC, skipping fork() handlers
+I0902 01:05:07.790123   85377 fork_posix.cc:71] Other threads are currently calling into gRPC, skipping fork() handlers
+I0902 01:05:07.794581   85377 fork_posix.cc:71] Other threads are currently calling into gRPC, skipping fork() handlers
+I0902 01:05:07.799088   85377 fork_posix.cc:71] Other threads are currently calling into gRPC, skipping fork() handlers
+Getting topology for timestamp 6 from cache
+Second phase matching completed: Processed 7 grid pairs, generated 7 ISL connections, time: 0.00s
+Timestamp 7: Maintained 0 connections, created 7 new connections
+Intra-domain topology generation: Processed 6 grids, created 10 ring connections
+
+Timestamp 7 topology generation time statistics (ms):
+  Data access time: 1.17ms
+  Inter-domain topology generation: 60.66ms (99.8%)
+  Intra-domain topology generation: 0.14ms (0.2%)
+  Total topology generation time: 60.80ms
+  Total timestamp processing time: 92.82ms
+
+Update networks at t 7...
+[0] shell 0: 96 Satellites state update!
+[0] GS: 6 GSs state update!
+[0] Shell 0: 0 deleted, 0 updated, 0 added.
+[0] GSL: 0 deleted, 0 updated, 6 added.
+0.8353378772735596 s for network update
+
+I0902 01:05:34.884580   85377 fork_posix.cc:71] Other threads are currently calling into gRPC, skipping fork() handlers
+I0902 01:05:34.889350   85377 fork_posix.cc:71] Other threads are currently calling into gRPC, skipping fork() handlers
+I0902 01:05:34.894584   85377 fork_posix.cc:71] Other threads are currently calling into gRPC, skipping fork() handlers
+I0902 01:05:34.899166   85377 fork_posix.cc:71] Other threads are currently calling into gRPC, skipping fork() handlers
+I0902 01:05:34.903581   85377 fork_posix.cc:71] Other threads are currently calling into gRPC, skipping fork() handlers
+I0902 01:05:34.908208   85377 fork_posix.cc:71] Other threads are currently calling into gRPC, skipping fork() handlers
+Getting topology for timestamp 7 from cache
+Second phase matching completed: Processed 6 grid pairs, generated 6 ISL connections, time: 0.00s
+Timestamp 8: Maintained 1 connections, created 6 new connections
+Intra-domain topology generation: Processed 6 grids, created 10 ring connections
+
+Timestamp 8 topology generation time statistics (ms):
+  Data access time: 1.15ms
+  Inter-domain topology generation: 65.73ms (99.8%)
+  Intra-domain topology generation: 0.14ms (0.2%)
+  Total topology generation time: 65.87ms
+  Total timestamp processing time: 99.60ms
+
+Update networks at t 8...
+[0] shell 0: 96 Satellites state update!
+[0] GS: 6 GSs state update!
+[0] Shell 0: 0 deleted, 1 updated, 0 added.
+[0] GSL: 0 deleted, 0 updated, 5 added.
+0.8508286476135254 s for network update
+
+I0902 01:05:54.903674   85377 fork_posix.cc:71] Other threads are currently calling into gRPC, skipping fork() handlers
+I0902 01:05:54.908543   85377 fork_posix.cc:71] Other threads are currently calling into gRPC, skipping fork() handlers
+I0902 01:05:54.912801   85377 fork_posix.cc:71] Other threads are currently calling into gRPC, skipping fork() handlers
+I0902 01:05:54.917173   85377 fork_posix.cc:71] Other threads are currently calling into gRPC, skipping fork() handlers
+I0902 01:05:54.921414   85377 fork_posix.cc:71] Other threads are currently calling into gRPC, skipping fork() handlers
+I0902 01:05:54.925742   85377 fork_posix.cc:71] Other threads are currently calling into gRPC, skipping fork() handlers
+Getting topology for timestamp 8 from cache
+Second phase matching completed: Processed 5 grid pairs, generated 5 ISL connections, time: 0.00s
+Timestamp 9: Maintained 2 connections, created 5 new connections
+Intra-domain topology generation: Processed 6 grids, created 10 ring connections
+
+Timestamp 9 topology generation time statistics (ms):
+  Data access time: 1.05ms
+  Inter-domain topology generation: 24.09ms (99.3%)
+  Intra-domain topology generation: 0.18ms (0.7%)
+  Total topology generation time: 24.27ms
+  Total timestamp processing time: 56.50ms
+
+Update networks at t 9...
+[0] shell 0: 96 Satellites state update!
+[0] GS: 6 GSs state update!
+[0] Shell 0: 0 deleted, 1 updated, 0 added.
+[0] GSL: 0 deleted, 0 updated, 6 added.
+0.8335907459259033 s for network update
+
+I0902 01:06:14.923259   85377 fork_posix.cc:71] Other threads are currently calling into gRPC, skipping fork() handlers
+I0902 01:06:14.927824   85377 fork_posix.cc:71] Other threads are currently calling into gRPC, skipping fork() handlers
+I0902 01:06:14.932369   85377 fork_posix.cc:71] Other threads are currently calling into gRPC, skipping fork() handlers
+I0902 01:06:14.937020   85377 fork_posix.cc:71] Other threads are currently calling into gRPC, skipping fork() handlers
+I0902 01:06:14.941385   85377 fork_posix.cc:71] Other threads are currently calling into gRPC, skipping fork() handlers
+I0902 01:06:14.945819   85377 fork_posix.cc:71] Other threads are currently calling into gRPC, skipping fork() handlers
+Getting topology for timestamp 9 from cache
+Second phase matching completed: Processed 4 grid pairs, generated 4 ISL connections, time: 0.00s
+Timestamp 10: Maintained 3 connections, created 4 new connections
+Intra-domain topology generation: Processed 6 grids, created 10 ring connections
+
+Timestamp 10 topology generation time statistics (ms):
+  Data access time: 1.07ms
+  Inter-domain topology generation: 57.86ms (99.8%)
+  Intra-domain topology generation: 0.14ms (0.2%)
+  Total topology generation time: 58.00ms
+  Total timestamp processing time: 90.71ms
+
+Update networks at t 10...
+[0] shell 0: 96 Satellites state update!
+[0] GS: 6 GSs state update!
+[0] Shell 0: 0 deleted, 3 updated, 0 added.
+[0] GSL: 0 deleted, 0 updated, 6 added.
+0.8814661502838135 s for network update
+
+I0902 01:06:34.942078   85377 fork_posix.cc:71] Other threads are currently calling into gRPC, skipping fork() handlers
+I0902 01:06:34.946646   85377 fork_posix.cc:71] Other threads are currently calling into gRPC, skipping fork() handlers
+I0902 01:06:34.951064   85377 fork_posix.cc:71] Other threads are currently calling into gRPC, skipping fork() handlers
+I0902 01:06:34.974374   85377 fork_posix.cc:71] Other threads are currently calling into gRPC, skipping fork() handlers
+I0902 01:06:34.979227   85377 fork_posix.cc:71] Other threads are currently calling into gRPC, skipping fork() handlers
+I0902 01:06:34.983537   85377 fork_posix.cc:71] Other threads are currently calling into gRPC, skipping fork() handlers
+Getting topology for timestamp 10 from cache
+Second phase matching completed: Processed 5 grid pairs, generated 5 ISL connections, time: 0.00s
+Timestamp 11: Maintained 2 connections, created 5 new connections
+Intra-domain topology generation: Processed 6 grids, created 10 ring connections
+
+Timestamp 11 topology generation time statistics (ms):
+  Data access time: 1.06ms
+  Inter-domain topology generation: 63.25ms (99.8%)
+  Intra-domain topology generation: 0.13ms (0.2%)
+  Total topology generation time: 63.38ms
+  Total timestamp processing time: 115.03ms
+
+Update networks at t 11...
+[0] shell 0: 96 Satellites state update!
+[0] GS: 6 GSs state update!
+[0] Shell 0: 0 deleted, 2 updated, 0 added.
+[0] GSL: 0 deleted, 0 updated, 6 added.
+0.8214478492736816 s for network update
+
+Removing containers and links...
+All containers and links remoted.

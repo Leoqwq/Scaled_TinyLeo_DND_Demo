@@ -1,0 +1,2 @@
+traceroute to ce:3:ce:4:6::6 (ce:3:ce:4:6::6), 128 hops max, 80 byte packets
+connect: Network is unreachable

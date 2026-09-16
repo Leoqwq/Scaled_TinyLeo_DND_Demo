@@ -1,0 +1,15 @@
+validation_report: PASS
+satellite_count: PASS
+coverage_ratio: PASS
+runtime_epochs: PASS
+peak_memory: PASS
+swap_used: PASS
+topology_update_p95: PASS
+active_grids: PASS
+path_diversity: PASS
+topology_changes: PASS
+gateway_handovers: PASS
+ping_reply: PASS
+srv6_deployment: PASS
+failure_recovery: FAIL
+OVERALL: FAIL

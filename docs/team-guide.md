@@ -33,14 +33,15 @@ Apache 2.0 许可仍保留。目录没有重新搬动，以保持既有脚本的
 
 ## 只看演示
 
-向实验负责人取得生成的 `tinyleo-compare.html` 以及匹配的录制文件。
-已嵌入数据的 HTML 可直接用浏览器打开；Compare 可以导入匹配的 v2 replay JSON。
-完整录制 ZIP、校验和和验收报告应一起保存，便于复核数据来源。
+从仓库下载完整文件后，用桌面浏览器打开
+[`data/compare-20260909/tinyleo-compare.html`](../data/compare-20260909/tinyleo-compare.html)。
+页面已内置真实 A/B 录制，默认进入 Compare，点击 Play 即可播放。
+无需 Google Cloud 账号、VM、SSH 或 Python；Live 暂不面向组员开放。
 
-仓库包含页面模板和构建工具，但不包含完整的真实录制包；
-`tools/replay/seconds.html` 有待替换的数据占位符，不能当成已生成的演示直接打开。
-`docs/index.html` 是原版论文网站，也不是实验演示。
-历史一秒录制的构建方式见 [Replay README](../tools/replay/README.md)。
+全部 16 轮录制、原始归档和早期实验输出都在根目录 `data/`，
+具体导入方式、成功/失败记录清单及校验步骤见 [离线数据指南](../data/README.md)。
+GitHub 的 HTML 预览不运行页面，需下载后打开。
+`tools/replay/seconds.html` 仍是构建模板，`docs/index.html` 仍是原版论文网站。
 
 ## 本地轻量检查
 
@@ -69,7 +70,8 @@ SSH、网络命名空间和 SRv6 环境；普通 Mac 本地检查不覆盖这些
 ## 数据和配置
 
 - 原版已跟踪的 `.npy` 数据及图片保留，供既有示例使用。
-- 新实验输出放在根目录 `outputs/` 或仓库之外；`tools/replay/results/` 也被忽略。
+- 已共享录制及后续本地下载使用根目录 `data/`；提交新增数据前核对录制完整性和凭据。
+- 临时输出仍可放在被忽略的 `outputs/` 或 `tools/replay/results/`。
 - SSH 私钥、Live session token 和真实机器配置不提交；机器专用 JSON 可使用 `*.local.json`。
 - 旧文档中的 `/home/leo/...` 和 `/Users/leo/...` 是历史环境路径，使用前替换为自己的路径。
 - 地图、吞吐、延迟和丢包结果的含义与限制见 [Live 说明](../tools/replay/LIVE.md)。

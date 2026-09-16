@@ -1,0 +1,4 @@
+PING ce:3:ce:4:6::6(ce:3:ce:4:6::6) 56 data bytes
+
+--- ce:3:ce:4:6::6 ping statistics ---
+500 packets transmitted, 0 received, 100% packet loss, time 5070ms

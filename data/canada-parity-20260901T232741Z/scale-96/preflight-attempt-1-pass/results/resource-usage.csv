@@ -1,0 +1,4 @@
+epoch,process_rss_bytes,system_memory_total_bytes,system_memory_available_bytes,system_memory_used_bytes,system_memory_percent,swap_total_bytes,swap_used_bytes,swap_free_bytes,swap_percent,scope
+0,101462016,33651986432,24557821952,9094164480,27.0,0,0,0,0.0,controller process RSS plus host memory/swap counters; not n2 VM acceptance
+1,102936576,33651986432,24244129792,9407856640,28.0,0,0,0,0.0,controller process RSS plus host memory/swap counters; not n2 VM acceptance
+2,103362560,33651986432,24243675136,9408311296,28.0,0,0,0,0.0,controller process RSS plus host memory/swap counters; not n2 VM acceptance

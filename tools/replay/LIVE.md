@@ -2,6 +2,9 @@
 
 ## Status
 
+Team members can use the [bundled offline recordings](../../data/README.md)
+without Google Cloud access. Live requires the experiment owner's VM permissions.
+
 The legacy single-demand runner and the opt-in multi-flow Compare profile are
 separate. See `docs/superpowers/plans/2026-09-08-live-qos-progress.md` for dated
 validation evidence. One real multi-flow A/B pair passed on 2026-09-08 with
@@ -87,8 +90,8 @@ the browser does not stop the run or the automatic download.
 ```sh
 python3 tools/replay/live_server.py local \
   --token-file /absolute/path/to/copied/session.token \
-  --output /Users/leo/Desktop/Obsidian/Satellite/TinyLeo/outputs \
-  --html /Users/leo/Desktop/Obsidian/Satellite/TinyLeo/outputs/tinyleo-replay.html
+  --output data \
+  --html data/compare-20260909/tinyleo-compare.html
 ```
 
 Open http://127.0.0.1:8765 and choose Live. Wait for `ready`, choose Shortest

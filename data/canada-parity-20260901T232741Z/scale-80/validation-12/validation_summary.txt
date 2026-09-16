@@ -1,0 +1,7 @@
+Topology artifact validation: PASS
+Satellites: 80
+Validated epochs: 12/12
+Path-quality epoch ratio: 100.0%
+Topology changes: 11
+Gateway handovers: 74
+Errors: 0

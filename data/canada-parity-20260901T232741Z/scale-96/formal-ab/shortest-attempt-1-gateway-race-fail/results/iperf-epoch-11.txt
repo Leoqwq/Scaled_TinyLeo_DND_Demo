@@ -1,0 +1,2 @@
+Connecting to host ce:3:ce:4:6::6, port 5201
+iperf3: error - control socket has closed unexpectedly

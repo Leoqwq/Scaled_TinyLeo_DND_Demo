@@ -1,0 +1,634 @@
+{
+  "errors": [
+    "failure_recovery: acceptance gate failed"
+  ],
+  "gates": {
+    "active_grids": {
+      "actual": {
+        "epochs_checked": 12,
+        "required_grids": [
+          12,
+          13,
+          14,
+          23,
+          24,
+          25
+        ]
+      },
+      "evidence": "validation_report.epochs[*].active_grid_counts",
+      "passed": true,
+      "required": "grids 12,13,14,23,24,25 have positive counts in every epoch"
+    },
+    "coverage_ratio": {
+      "actual": 0.9375,
+      "evidence": "/home/leo/tinyleo-runs/canada-parity-20260901T232741Z/scale-96/synthesis_result.npy",
+      "passed": true,
+      "required": "value >= 0.90"
+    },
+    "failure_recovery": {
+      "actual": {
+        "epoch7_ping": {
+          "loss_percent": 100.0,
+          "received": 0,
+          "transmitted": 500
+        },
+        "failure_acknowledgement": {
+          "epoch": 6,
+          "failed_link": [
+            "SH1SAT23",
+            "SH1SAT66"
+          ],
+          "remote_id": 0,
+          "removed_satellite": "SH1SAT23",
+          "replacement_satellite": "SH1SAT42",
+          "updated_satellites": [
+            "SH1SAT23",
+            "SH1SAT42",
+            "SH1SAT71",
+            "SH1SAT89"
+          ]
+        },
+        "failure_recovery_interruption_seconds": 0.7987824219999311,
+        "failure_status": "returned",
+        "measurement_statuses": {
+          "iperf": "captured",
+          "ping": "captured",
+          "traceroute": "captured"
+        },
+        "post_failure_path": null,
+        "pre_failure_path": [
+          "ce:3:ce:2:4:0:aaaa:40",
+          "aaaa:16:aaaa:40::10",
+          "aaaa:16:aaaa:27::40",
+          "aaaa:10:aaaa:27::10",
+          "ce:3:ce:4:6::6"
+        ],
+        "recovery_path": null
+      },
+      "evidence": "remote identity acknowledgement plus parsed epoch-5/6/7 network artifacts",
+      "passed": false,
+      "required": "timed epoch-6 remote failure ack; epoch-7 ping/traceroute prove recovery"
+    },
+    "gateway_handovers": {
+      "actual": 74,
+      "evidence": "validation_report.gateway_handover_count",
+      "passed": true,
+      "required": "gateway_handover_count >= 2"
+    },
+    "path_diversity": {
+      "actual": {
+        "recomputed": 1.0,
+        "reported": 1.0
+      },
+      "evidence": "validation report and independent per-epoch recomputation",
+      "passed": true,
+      "required": "recomputed edge_disjoint_paths >= 2 ratio >= 0.80 and matches report"
+    },
+    "peak_memory": {
+      "actual": {
+        "bytes": 9516761088,
+        "gib": 8.863174438476562
+      },
+      "evidence": "maximum system_memory_used_bytes across resource-usage.csv",
+      "passed": true,
+      "required": "peak system_memory_used_bytes < 24 GiB"
+    },
+    "ping_reply": {
+      "actual": [
+        {
+          "artifact": "ping-epoch-0.txt",
+          "destination": "GS6",
+          "source": "GS4",
+          "stats": {
+            "loss_percent": 22.8,
+            "received": 386,
+            "transmitted": 500
+          }
+        },
+        {
+          "artifact": "ping-epoch-11.txt",
+          "destination": "GS6",
+          "source": "GS4",
+          "stats": {
+            "loss_percent": 100.0,
+            "received": 0,
+            "transmitted": 500
+          }
+        },
+        {
+          "artifact": "ping-epoch-5.txt",
+          "destination": "GS6",
+          "source": "GS4",
+          "stats": {
+            "loss_percent": 0.0,
+            "received": 500,
+            "transmitted": 500
+          }
+        },
+        {
+          "artifact": "ping-epoch-6.txt",
+          "destination": "GS6",
+          "source": "GS4",
+          "stats": {
+            "loss_percent": 100.0,
+            "received": 0,
+            "transmitted": 500
+          }
+        },
+        {
+          "artifact": "ping-epoch-7.txt",
+          "destination": "GS6",
+          "source": "GS4",
+          "stats": {
+            "loss_percent": 100.0,
+            "received": 0,
+            "transmitted": 500
+          }
+        }
+      ],
+      "evidence": "validated transmitted/received/loss tuples; STATUS ERROR/MISSING is rejected",
+      "passed": true,
+      "required": "exact GS4-to-GS6 epoch artifacts parse and at least one reports received > 0"
+    },
+    "runtime_epochs": {
+      "actual": {
+        "resource": true,
+        "topology_updates": true,
+        "validation": true
+      },
+      "evidence": "independent exact epoch-ID checks",
+      "passed": true,
+      "required": "validation and both runtime CSVs contain epochs 0..11 exactly once"
+    },
+    "satellite_count": {
+      "actual": 96,
+      "evidence": "validation_report.satellite_count",
+      "passed": true,
+      "required": "64 <= value <= 128"
+    },
+    "srv6_deployment": {
+      "actual": [
+        {
+          "agents": [
+            {
+              "name": "GS1",
+              "namespace_pid": 51459
+            },
+            {
+              "name": "GS2",
+              "namespace_pid": 51461
+            },
+            {
+              "name": "GS3",
+              "namespace_pid": 51463
+            },
+            {
+              "name": "GS4",
+              "namespace_pid": 51465
+            },
+            {
+              "name": "GS5",
+              "namespace_pid": 51467
+            },
+            {
+              "name": "GS6",
+              "namespace_pid": 51469
+            },
+            {
+              "name": "SH1SAT1",
+              "namespace_pid": 51267
+            },
+            {
+              "name": "SH1SAT10",
+              "namespace_pid": 51285
+            },
+            {
+              "name": "SH1SAT11",
+              "namespace_pid": 51287
+            },
+            {
+              "name": "SH1SAT12",
+              "namespace_pid": 51289
+            },
+            {
+              "name": "SH1SAT13",
+              "namespace_pid": 51291
+            },
+            {
+              "name": "SH1SAT14",
+              "namespace_pid": 51293
+            },
+            {
+              "name": "SH1SAT15",
+              "namespace_pid": 51295
+            },
+            {
+              "name": "SH1SAT16",
+              "namespace_pid": 51297
+            },
+            {
+              "name": "SH1SAT17",
+              "namespace_pid": 51299
+            },
+            {
+              "name": "SH1SAT18",
+              "namespace_pid": 51301
+            },
+            {
+              "name": "SH1SAT19",
+              "namespace_pid": 51303
+            },
+            {
+              "name": "SH1SAT2",
+              "namespace_pid": 51269
+            },
+            {
+              "name": "SH1SAT20",
+              "namespace_pid": 51305
+            },
+            {
+              "name": "SH1SAT21",
+              "namespace_pid": 51307
+            },
+            {
+              "name": "SH1SAT22",
+              "namespace_pid": 51309
+            },
+            {
+              "name": "SH1SAT23",
+              "namespace_pid": 51311
+            },
+            {
+              "name": "SH1SAT24",
+              "namespace_pid": 51313
+            },
+            {
+              "name": "SH1SAT25",
+              "namespace_pid": 51315
+            },
+            {
+              "name": "SH1SAT26",
+              "namespace_pid": 51317
+            },
+            {
+              "name": "SH1SAT27",
+              "namespace_pid": 51319
+            },
+            {
+              "name": "SH1SAT28",
+              "namespace_pid": 51321
+            },
+            {
+              "name": "SH1SAT29",
+              "namespace_pid": 51323
+            },
+            {
+              "name": "SH1SAT3",
+              "namespace_pid": 51271
+            },
+            {
+              "name": "SH1SAT30",
+              "namespace_pid": 51325
+            },
+            {
+              "name": "SH1SAT31",
+              "namespace_pid": 51327
+            },
+            {
+              "name": "SH1SAT32",
+              "namespace_pid": 51329
+            },
+            {
+              "name": "SH1SAT33",
+              "namespace_pid": 51331
+            },
+            {
+              "name": "SH1SAT34",
+              "namespace_pid": 51333
+            },
+            {
+              "name": "SH1SAT35",
+              "namespace_pid": 51335
+            },
+            {
+              "name": "SH1SAT36",
+              "namespace_pid": 51337
+            },
+            {
+              "name": "SH1SAT37",
+              "namespace_pid": 51339
+            },
+            {
+              "name": "SH1SAT38",
+              "namespace_pid": 51341
+            },
+            {
+              "name": "SH1SAT39",
+              "namespace_pid": 51343
+            },
+            {
+              "name": "SH1SAT4",
+              "namespace_pid": 51273
+            },
+            {
+              "name": "SH1SAT40",
+              "namespace_pid": 51345
+            },
+            {
+              "name": "SH1SAT41",
+              "namespace_pid": 51347
+            },
+            {
+              "name": "SH1SAT42",
+              "namespace_pid": 51349
+            },
+            {
+              "name": "SH1SAT43",
+              "namespace_pid": 51351
+            },
+            {
+              "name": "SH1SAT44",
+              "namespace_pid": 51353
+            },
+            {
+              "name": "SH1SAT45",
+              "namespace_pid": 51355
+            },
+            {
+              "name": "SH1SAT46",
+              "namespace_pid": 51357
+            },
+            {
+              "name": "SH1SAT47",
+              "namespace_pid": 51359
+            },
+            {
+              "name": "SH1SAT48",
+              "namespace_pid": 51361
+            },
+            {
+              "name": "SH1SAT49",
+              "namespace_pid": 51363
+            },
+            {
+              "name": "SH1SAT5",
+              "namespace_pid": 51275
+            },
+            {
+              "name": "SH1SAT50",
+              "namespace_pid": 51365
+            },
+            {
+              "name": "SH1SAT51",
+              "namespace_pid": 51367
+            },
+            {
+              "name": "SH1SAT52",
+              "namespace_pid": 51369
+            },
+            {
+              "name": "SH1SAT53",
+              "namespace_pid": 51371
+            },
+            {
+              "name": "SH1SAT54",
+              "namespace_pid": 51373
+            },
+            {
+              "name": "SH1SAT55",
+              "namespace_pid": 51375
+            },
+            {
+              "name": "SH1SAT56",
+              "namespace_pid": 51377
+            },
+            {
+              "name": "SH1SAT57",
+              "namespace_pid": 51379
+            },
+            {
+              "name": "SH1SAT58",
+              "namespace_pid": 51381
+            },
+            {
+              "name": "SH1SAT59",
+              "namespace_pid": 51383
+            },
+            {
+              "name": "SH1SAT6",
+              "namespace_pid": 51277
+            },
+            {
+              "name": "SH1SAT60",
+              "namespace_pid": 51385
+            },
+            {
+              "name": "SH1SAT61",
+              "namespace_pid": 51387
+            },
+            {
+              "name": "SH1SAT62",
+              "namespace_pid": 51389
+            },
+            {
+              "name": "SH1SAT63",
+              "namespace_pid": 51391
+            },
+            {
+              "name": "SH1SAT64",
+              "namespace_pid": 51393
+            },
+            {
+              "name": "SH1SAT65",
+              "namespace_pid": 51395
+            },
+            {
+              "name": "SH1SAT66",
+              "namespace_pid": 51397
+            },
+            {
+              "name": "SH1SAT67",
+              "namespace_pid": 51399
+            },
+            {
+              "name": "SH1SAT68",
+              "namespace_pid": 51401
+            },
+            {
+              "name": "SH1SAT69",
+              "namespace_pid": 51403
+            },
+            {
+              "name": "SH1SAT7",
+              "namespace_pid": 51279
+            },
+            {
+              "name": "SH1SAT70",
+              "namespace_pid": 51405
+            },
+            {
+              "name": "SH1SAT71",
+              "namespace_pid": 51407
+            },
+            {
+              "name": "SH1SAT72",
+              "namespace_pid": 51409
+            },
+            {
+              "name": "SH1SAT73",
+              "namespace_pid": 51411
+            },
+            {
+              "name": "SH1SAT74",
+              "namespace_pid": 51413
+            },
+            {
+              "name": "SH1SAT75",
+              "namespace_pid": 51415
+            },
+            {
+              "name": "SH1SAT76",
+              "namespace_pid": 51417
+            },
+            {
+              "name": "SH1SAT77",
+              "namespace_pid": 51419
+            },
+            {
+              "name": "SH1SAT78",
+              "namespace_pid": 51421
+            },
+            {
+              "name": "SH1SAT79",
+              "namespace_pid": 51423
+            },
+            {
+              "name": "SH1SAT8",
+              "namespace_pid": 51281
+            },
+            {
+              "name": "SH1SAT80",
+              "namespace_pid": 51425
+            },
+            {
+              "name": "SH1SAT81",
+              "namespace_pid": 51427
+            },
+            {
+              "name": "SH1SAT82",
+              "namespace_pid": 51429
+            },
+            {
+              "name": "SH1SAT83",
+              "namespace_pid": 51431
+            },
+            {
+              "name": "SH1SAT84",
+              "namespace_pid": 51433
+            },
+            {
+              "name": "SH1SAT85",
+              "namespace_pid": 51435
+            },
+            {
+              "name": "SH1SAT86",
+              "namespace_pid": 51437
+            },
+            {
+              "name": "SH1SAT87",
+              "namespace_pid": 51439
+            },
+            {
+              "name": "SH1SAT88",
+              "namespace_pid": 51441
+            },
+            {
+              "name": "SH1SAT89",
+              "namespace_pid": 51443
+            },
+            {
+              "name": "SH1SAT9",
+              "namespace_pid": 51283
+            },
+            {
+              "name": "SH1SAT90",
+              "namespace_pid": 51445
+            },
+            {
+              "name": "SH1SAT91",
+              "namespace_pid": 51447
+            },
+            {
+              "name": "SH1SAT92",
+              "namespace_pid": 51449
+            },
+            {
+              "name": "SH1SAT93",
+              "namespace_pid": 51451
+            },
+            {
+              "name": "SH1SAT94",
+              "namespace_pid": 51453
+            },
+            {
+              "name": "SH1SAT95",
+              "namespace_pid": 51455
+            },
+            {
+              "name": "SH1SAT96",
+              "namespace_pid": 51457
+            }
+          ],
+          "expected_count": 102,
+          "remote_id": 0,
+          "started_count": 102
+        }
+      ],
+      "evidence": "epoch-0 remote agent startup acknowledgements",
+      "passed": true,
+      "required": "unique remote acknowledgements cover satellite_count + 6 live agents"
+    },
+    "swap_used": {
+      "actual": 0,
+      "evidence": "maximum swap_used_bytes across resource-usage.csv",
+      "passed": true,
+      "required": "maximum swap_used_bytes == 0"
+    },
+    "topology_changes": {
+      "actual": 11,
+      "evidence": "validation_report.topology_change_count",
+      "passed": true,
+      "required": "topology_change_count >= 3"
+    },
+    "topology_update_p95": {
+      "actual": 0.8382926940504604,
+      "evidence": "NumPy linear percentile over topology-update-times.csv",
+      "passed": true,
+      "required": "linear p95 of 12 returned updates < 15 seconds"
+    },
+    "validation_report": {
+      "actual": {
+        "error_count": 0,
+        "valid": true
+      },
+      "evidence": "/home/leo/tinyleo-runs/canada-parity-20260901T232741Z/scale-96/validation-12/validation_report.json",
+      "passed": true,
+      "required": "valid == true, errors is empty, and report schema is valid"
+    }
+  },
+  "metrics": {
+    "failure_recovery_interruption_seconds": 0.7987824219999311,
+    "minimum_ping_loss_percent": 0.0,
+    "peak_process_rss_bytes": 106610688,
+    "peak_process_rss_gib": 0.0992889404296875,
+    "ping_loss_percent_by_artifact": {
+      "ping-epoch-0.txt": 22.8,
+      "ping-epoch-11.txt": 100.0,
+      "ping-epoch-5.txt": 0.0,
+      "ping-epoch-6.txt": 100.0,
+      "ping-epoch-7.txt": 100.0
+    },
+    "recovery_ping_loss_percent": 100.0
+  },
+  "valid": false
+}
