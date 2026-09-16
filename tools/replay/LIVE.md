@@ -2,6 +2,10 @@
 
 ## Status
 
+Live is currently unavailable. This document is a maintainer reference for a
+future prepared environment, not the team demo startup guide. Use root
+[replay.html](../../replay.html) for both offline Replay and Compare.
+
 Team members can use the [bundled offline recordings](../../data/README.md)
 without Google Cloud access. Live requires the experiment owner's VM permissions.
 
@@ -89,11 +93,17 @@ the browser does not stop the run or the automatic download.
 
 ```sh
 python3 tools/replay/live_server.py local \
-  --token-file /absolute/path/to/copied/session.token \
-  --output data \
-  --html data/compare-20260909/tinyleo-compare.html
+  --token-file /absolute/path/to/copied/session.token
 ```
 
+The local command defaults to `<repository>/data` for downloads and
+`<repository>/replay.html` for the frontend, resolved from the script location
+rather than the working directory. `--output` and `--html` remain optional overrides.
+Existing processes keep their original arguments. The developer machine retains
+local compatibility links for the migrated output directory and former HTML path;
+these links are not needed in a fresh clone. This path change does not restore VM access.
+
+When a prepared Live environment becomes available again:
 Open http://127.0.0.1:8765 and choose Live. Wait for `ready`, choose Shortest
 Path or QoS Priority, then Start emulation. Nodes are not started by this button.
 Keep the local relay process running to finish automatic archival.

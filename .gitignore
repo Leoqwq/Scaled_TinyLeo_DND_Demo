@@ -24,3 +24,6 @@ node_modules/
 
 # Generated demo exports and experiment archives belong outside source control.
 /outputs/
+
+# Local compatibility alias for the pre-migration relay process.
+/data/compare-20260909/tinyleo-compare.html

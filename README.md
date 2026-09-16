@@ -9,7 +9,7 @@ one-second topology updates, offline browser replay, and recorded
 Shortest Path / QoS Priority comparisons. The original TinyLEO research and
 networking architecture are credited below.
 
-[Team guide / 组员导览](docs/team-guide.md) · [Offline data guide](data/README.md) · [Documentation](docs/README.md)
+[Team guide](docs/team-guide.md) · [Offline data guide](data/README.md) · [Documentation](docs/README.md)
 
 ## What the demo does
 
@@ -40,7 +40,7 @@ git clone --branch main https://github.com/Leoqwq/Scaled_TinyLeo_DND_Demo.git
 
 **Replay and Compare use the same browser frontend:**
 
-[`data/compare-20260909/tinyleo-compare.html`](data/compare-20260909/tinyleo-compare.html)
+[`replay.html`](replay.html)
 
 Open this downloaded HTML file in a desktop browser, then switch between
 **Replay** and **Compare** on the page. GitHub's file preview does not run the
@@ -105,7 +105,8 @@ browser fixtures test interface behavior and are not performance evidence.
 | [`network_orchestrator/`](network_orchestrator/) | TinyLEO routing, MPC, southbound and SRv6 code, with emulation and validation adaptations |
 | [`tools/`](tools/) | Preparation, execution, and checking of one-second runs |
 | [`tools/replay/`](tools/replay/) | Live relay, traffic collection, recording, replay, and comparison UI |
-| [`data/`](data/README.md) | Offline demo, recorded runs, raw archives, and integrity checksums |
+| [`replay.html`](replay.html) | Unified offline Replay / Compare frontend |
+| [`data/`](data/README.md) | Recorded runs, raw archives, and integrity checksums |
 | [`docs/`](docs/README.md) | Guides, runbooks, and dated design/validation records |
 
 The [12-epoch Canada runbook](docs/canada-parity-runbook.md) is retained as a

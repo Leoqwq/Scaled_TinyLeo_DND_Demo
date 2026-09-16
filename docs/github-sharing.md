@@ -1,43 +1,39 @@
-# 将当前版本分享给组员
+# Sharing this project on GitHub
 
-## Fork 和 branch 的区别
+## Repository and branch
 
-**Fork 是你或小组名下的一份 GitHub 仓库；branch 是同一仓库内的一条开发线。**
-若主要目的是分享基于原版 TinyLEO 的扩展，建议 fork 原版仓库，然后把现有开发分支
-推到该 fork。无需重新下载源码、重新做改动或删除 Git 历史。
-如果你本来就是原仓库维护者，也可以按小组约定直接在那里推送开发分支。
+A fork is a repository under your own account or organization; a branch is a
+line of development within a repository. This project retains TinyLEO's Git
+history and attribution while sharing the demo extensions in a team repository.
 
-## 本项目的分享位置
+- [Team repository](https://github.com/Leoqwq/Scaled_TinyLeo_DND_Demo)
+- [Upstream TinyLEO](https://github.com/TinyLEO-toolkit/TinyLEO)
 
-- 小组仓库：[Scaled_TinyLeo_DND_Demo](https://github.com/Leoqwq/Scaled_TinyLeo_DND_Demo)
-- 原版仓库：[TinyLEO-toolkit/TinyLEO](https://github.com/TinyLEO-toolkit/TinyLEO)
+Locally, `origin` points to the team repository and `upstream` points to TinyLEO.
+The team's `main` contains the merged extensions. The retired development branch
+was deleted; its commits remain in `main` history.
 
-本地 `origin` 用于你的小组仓库，`upstream` 保留原版仓库。
-小组仓库的 `main` 包含已合并的 Canada / Live / Replay 扩展，组员可以直接浏览仓库首页。
-已合并的开发分支已删除，开发历史保留在 `main` 的提交记录中。
-
-## 组员下载
+## Download and view
 
 ```sh
 git clone --branch main https://github.com/Leoqwq/Scaled_TinyLeo_DND_Demo.git
 cd Scaled_TinyLeo_DND_Demo
 ```
 
-然后阅读 [组员导览](team-guide.md)。不需要重新 fork 才能浏览或下载。
+Open [replay.html](../replay.html) in a desktop browser for both Replay and
+Compare. Recordings and archives are included in [data/](../data/README.md).
+No fork or Google Cloud VM access is needed to view them. Live is currently unavailable.
 
-## 后续更新
+## Future contributions
 
-后续功能从小组 `main` 建立新的开发分支，提交并推送后，在小组仓库内发 PR 合并回
-`main`。创建 PR 时核对目标仓库为 `Leoqwq/Scaled_TinyLeo_DND_Demo`，避免误选原版仓库。
-未提交修改不会随 push 上传；提交前使用 `git diff` 和 `git diff --cached` 核对内容。
+Start new work from the team's `main`, commit to a feature branch, and open a
+pull request against `Leoqwq/Scaled_TinyLeo_DND_Demo`. Check the target repository
+so the request is not accidentally sent upstream. Review `git diff` and
+`git diff --cached` before committing. Uncommitted work is not uploaded by push.
 
-## 演示附件
+Preserve the upstream LICENSE, author attribution, and paper citation. Keep
+synthetic fixtures distinct from real experiment results. Ignore rules do not
+remove files already stored in Git history; revoke any accidentally committed
+credential before addressing its history separately.
 
-生成的 HTML、全部现存录制、原始档案及校验和已收录在根目录
-[`data/`](../data/README.md)。组员 clone 或下载仓库后可离线 Replay/Compare，
-无需 Google Cloud VM 权限。不要将合成测试 fixture 作为实验结果分享。
-
-保留原版 LICENSE、作者与论文引用。新增忽略规则不会从既有 Git 历史移除文件；
-若发现已提交的真实凭据，应先撤销凭据，再单独处理历史。
-
-参考：[GitHub 官方 fork 远端配置说明](https://docs.github.com/en/pull-requests/how-tos/work-with-forks/configuring-a-remote-repository-for-a-fork)。
+Reference: [GitHub's fork remote configuration guide](https://docs.github.com/en/pull-requests/how-tos/work-with-forks/configuring-a-remote-repository-for-a-fork).

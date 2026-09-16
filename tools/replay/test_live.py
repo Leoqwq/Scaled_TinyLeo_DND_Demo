@@ -14,6 +14,27 @@ from pathlib import Path
 
 
 class LiveContractTests(unittest.TestCase):
+    def test_local_defaults_are_repository_relative_from_another_directory(self):
+        from live_server import parse_args
+        import os
+        repo = Path(__file__).resolve().parents[2]
+        previous = Path.cwd()
+        with tempfile.TemporaryDirectory() as directory:
+            try:
+                os.chdir(directory)
+                args = parse_args(['local', '--token-file', 'session.token'])
+                self.assertEqual(args.output, repo / 'data')
+                self.assertEqual(args.html, repo / 'replay.html')
+            finally:
+                os.chdir(previous)
+
+    def test_explicit_local_paths_still_override_defaults(self):
+        from live_server import parse_args
+        args = parse_args(['local', '--token-file', 'session.token',
+                           '--output', '/tmp/custom-data', '--html', '/tmp/custom.html'])
+        self.assertEqual(args.output, Path('/tmp/custom-data'))
+        self.assertEqual(args.html, Path('/tmp/custom.html'))
+
     def test_live_module_exists(self):
         self.assertTrue(Path(__file__).with_name('live.py').is_file())
 

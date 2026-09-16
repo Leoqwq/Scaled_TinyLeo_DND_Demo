@@ -1,5 +1,9 @@
 # QoS implementation checkpoint — 2026-09-08
 
+> Historical paths and frontend filenames below describe the original delivery.
+> The published frontend is now root [replay.html](../../../replay.html);
+> recordings are under [data/](../../../data/README.md). Live is currently unavailable.
+
 ## Completed: first implementation batch
 
 The user requested pre-existing changes be committed by responsibility and

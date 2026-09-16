@@ -207,7 +207,8 @@ def server_for(backend, token, port, html=None):
     return LoopbackServer(('127.0.0.1', port), Handler)
 
 
-def main():
+def parse_args(argv=None):
+    repo = Path(__file__).resolve().parents[2]
     parser = argparse.ArgumentParser(description=__doc__)
     sub = parser.add_subparsers(dest='command', required=True)
     vm = sub.add_parser('prepare-vm', help='MANUAL: creates nodes before serving Live requests')
@@ -221,10 +222,16 @@ def main():
     local = sub.add_parser('local')
     local.add_argument('--remote', default='http://127.0.0.1:8767')
     local.add_argument('--token-file', type=Path, required=True)
-    local.add_argument('--output', type=Path, required=True)
-    local.add_argument('--html', type=Path, required=True)
+    local.add_argument('--output', type=Path, default=repo / 'data',
+                       help='Recording directory (default: repository data/)')
+    local.add_argument('--html', type=Path, default=repo / 'replay.html',
+                       help='Browser frontend (default: repository replay.html)')
     local.add_argument('--port', type=int, default=8765)
-    args = parser.parse_args()
+    return parser.parse_args(argv)
+
+
+def main():
+    args = parse_args()
     if args.command == 'prepare-vm':
         if args.token_file.exists():
             raise ValueError('Choose a new token file for this manually prepared session')

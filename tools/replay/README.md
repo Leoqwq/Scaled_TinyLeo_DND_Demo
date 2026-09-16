@@ -2,8 +2,9 @@
 
 For the project overview, see the [team guide](../../docs/team-guide.md).
 The `seconds.html` and `template.html` files are build templates, not ready-to-view
-demos. Complete real recordings and ready-to-open HTML are included in
-[`data/`](../../data/README.md); start there for offline team review.
+demos. Open root [replay.html](../../replay.html) for both Replay and Compare.
+Real recordings and selection instructions are in [`data/`](../../data/README.md).
+Live is currently unavailable; the setup notes below are maintainer references.
 A generated page also includes Compare for matched v2 replay JSON recordings;
 see [Live / Compare setup and status](LIVE.md).
 
