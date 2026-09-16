@@ -14,12 +14,13 @@
 - 原版仓库：[TinyLEO-toolkit/TinyLEO](https://github.com/TinyLEO-toolkit/TinyLEO)
 
 本地 `origin` 用于你的小组仓库，`upstream` 保留原版仓库。
-原版 `main` 不包含这条开发分支的全部扩展；浏览扩展时请使用上面的分支链接。
+小组仓库的 `main` 包含已合并的 Canada / Live / Replay 扩展，组员可以直接浏览仓库首页。
+上面的开发分支保留用于追溯开发历史。
 
 ## 组员下载
 
 ```sh
-git clone --branch codex/canada-topology-validator https://github.com/Leoqwq/Scaled_TinyLeo_DND_Demo.git
+git clone --branch main https://github.com/Leoqwq/Scaled_TinyLeo_DND_Demo.git
 cd Scaled_TinyLeo_DND_Demo
 ```
 
@@ -27,25 +28,9 @@ cd Scaled_TinyLeo_DND_Demo
 
 ## 后续更新
 
-在当前开发分支检查并提交希望分享的修改；未提交修改不会随 push 上传。
-
-```sh
-git status --short --branch
-git diff
-```
-
-使用 `git add <已审阅的文件路径>` 暂存，`git diff --cached` 核对，然后
-`git commit -m "描述本次修改"`，最后：
-
-```sh
-git push origin codex/canada-topology-validator
-```
-
-为了让大家打开仓库首页就能看到扩展说明，可以将此分支设为小组仓库的默认分支，
-也可以在小组仓库内发 PR，合并到小组的 `main` 后分享首页。
-创建 PR 时核对目标仓库，避免误选原版仓库。
-
-不需要为分享再建立分支。之后开始新功能时，从团队认可的版本建立功能分支即可。
+后续功能从小组 `main` 建立新的开发分支，提交并推送后，在小组仓库内发 PR 合并回
+`main`。创建 PR 时核对目标仓库为 `Leoqwq/Scaled_TinyLeo_DND_Demo`，避免误选原版仓库。
+未提交修改不会随 push 上传；提交前使用 `git diff` 和 `git diff --cached` 核对内容。
 
 ## 演示附件
 
