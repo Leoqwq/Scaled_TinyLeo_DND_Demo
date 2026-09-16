@@ -3,7 +3,7 @@
 本目录收录原 `TinyLeo_CA/outputs/` 的完整实验输出。组员无需 Google Cloud 账号、
 VM 权限、SSH 隧道或 Python 环境即可观看内置回放。
 
-## 最快打开方式
+## 统一的 Replay / Compare 入口
 
 1. 下载并解压整个仓库（GitHub **Code → Download ZIP**），或 clone `main`。
 2. 用桌面浏览器打开 [compare-20260909/tinyleo-compare.html](compare-20260909/tinyleo-compare.html)。
@@ -13,15 +13,17 @@ VM 权限、SSH 隧道或 Python 环境即可观看内置回放。
 4. 在 **Flow** 中选择 `bulk-cross`，点击 **First route difference** 查看路由差异。
    向下查看 RTT、丢包、吞吐量曲线、Final summary 和 Route statistics。
 
-请使用 **Replay / Compare**。**Live** 需要实验负责人的 VM 环境和权限，当前不面向组员开放。
-离线页面保留了 Live 入口，但它不影响已有录制的播放。
+**Replay 和 Compare 均使用上面同一个 HTML，在页面内切换，无需打开另一份前端。**
+**Live 当前不可用**；页面中保留的 Live 按钮不属于本次发布的使用流程。
 
 ## 导入其他录制
 
-- **单轮回放：** 点击 **Import replay**，选择任一日期目录内的 `.replay.json`。
+- **单轮回放：** 在同一页面点击 **Import replay**，选择日期目录内的一份 `.replay.json`；
+  导入后自动切换 Replay。推荐选下面内置对照中的任一份完整 301 帧录制，再点击 Play。
 - **两轮比较：** 在 **Compare** 的 Shortest Path 和 QoS Priority 两个文件选择框中，
   分别导入对应的 v2 `.replay.json`。页面会验证场景、物理拓扑和运行来源是否匹配。
-- ZIP 是原始证据档案，不能直接作为浏览器导入文件。
+- 仅导入 `.replay.json`；ZIP/TAR 是原始证据档案，`.sha256`、summary JSON、CSV
+  和原始拓扑文件也不是浏览器导入文件。
 - 失败记录保留用于排查，只包含部分时间轴；不能作为完整性能对照。
 - 旧版 schema v1 记录用于 Replay，不适用于多流 Compare。
 
@@ -57,7 +59,7 @@ VM 权限、SSH 隧道或 Python 环境即可观看内置回放。
 - 16 轮录制：11 轮完成的 v2、3 轮失败的 v2、2 轮旧版 v1。
 - 每个日期目录保留 `.replay.json`、原始 `.zip` 和 `.sha256`。
 - `compare-20260909/`：内置 A/B 页面、验收报告、历史操作说明及后台日志。
-- `tinyleo-replay.html`：早期一秒录制的独立回放页面。
+- `tinyleo-replay.html`：保留的早期历史导出；组员统一使用上面的 Compare HTML 进行 Replay / Compare。
 - `seconds-20260905.tar.gz` 及 summary：早期一秒实验归档。
 - `canada-parity-20260901T232741Z/` 及同名 tar.gz：早期 12-epoch 实验的
   解压数据和原始压缩包，包括 64/80/96 卫星候选数据。

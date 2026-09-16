@@ -36,7 +36,10 @@ Apache 2.0 许可仍保留。目录没有重新搬动，以保持既有脚本的
 从仓库下载完整文件后，用桌面浏览器打开
 [`data/compare-20260909/tinyleo-compare.html`](../data/compare-20260909/tinyleo-compare.html)。
 页面已内置真实 A/B 录制，默认进入 Compare，点击 Play 即可播放。
-无需 Google Cloud 账号、VM、SSH 或 Python；Live 暂不面向组员开放。
+无需 Google Cloud 账号、VM、SSH 或 Python；Live 当前不可用。
+Replay 也使用同一个 HTML：点击 Import replay 导入单份 `.replay.json`。
+Compare 则选取一份 Shortest Path 和一份 QoS Priority 的完整、匹配 v2 录制，
+具体推荐文件路径见下面的离线数据指南。
 
 全部 16 轮录制、原始归档和早期实验输出都在根目录 `data/`，
 具体导入方式、成功/失败记录清单及校验步骤见 [离线数据指南](../data/README.md)。
