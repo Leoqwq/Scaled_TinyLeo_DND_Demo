@@ -1,5 +1,11 @@
 # Canada experiment replay
 
+For the project overview, see the [team guide](../../docs/team-guide.md).
+The `seconds.html` and `template.html` files are build templates, not ready-to-view
+demos. Complete real recordings and generated HTML are distributed separately.
+A generated page also includes Compare for matched v2 replay JSON recordings;
+see [Live / Compare setup and status](LIVE.md).
+
 The current page includes Live / Replay tabs. Live requires the loopback relay
 and a manually prepared VM session; see [LIVE.md](LIVE.md). The HTML alone
 continues to support offline replay. New Live modes use the actual northbound
@@ -57,5 +63,5 @@ Map boundary: https://github.com/johan/world.geo.json/blob/master/countries/CAN.
 equirectangular projection and are illustrative, not distance measurements.
 
 Demo sequence: epoch 5 baseline → epoch 6 failure → epoch 7 recovery;
-switch between shortest and geographic at each frame. The current implementation
-does not connect to live VM telemetry.
+switch between shortest and geographic at each frame. This historical replay
+does not connect to live VM telemetry; the newer Live mode is documented above.

@@ -1,5 +1,10 @@
 # Live / Replay implementation
 
+> Historical single-demand implementation plan. For the later multi-flow scope
+> and the accepted real A/B pair, see the final section of the
+> [dated QoS progress record](superpowers/plans/2026-09-08-live-qos-progress.md).
+> Pending items below describe this earlier checkpoint, not current overall status.
+
 Approved scope: one English page, manual node preparation, remote experiment
 start, shortest_path and qos_priority, second-resolution telemetry, automatic
 local archival. Existing recorded experiments remain historical, not relabeled.

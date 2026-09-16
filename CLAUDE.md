@@ -1,0 +1,14 @@
+# Repository guidance
+
+- Read `README.md` and `docs/team-guide.md` for scope and navigation.
+- Preserve upstream attribution, `LICENSE`, and paper citations.
+- Keep the existing source layout: scripts and example configs use relative paths.
+- Local Replay tests: `python -m unittest discover -s tools/replay -p 'test_*.py' -v`.
+  They require numpy/networkx; HTTP tests bind loopback ports.
+- Pure JavaScript comparison check: `node tools/replay/test_compare.cjs`.
+- Full emulation requires a prepared Linux VM; local tests do not certify it.
+- Treat `docs/superpowers/` as dated design and evidence, not a current task queue.
+- Keep measured packet results, model estimates, and synthetic fixtures distinct.
+- Keep experiment outputs and machine credentials outside tracked source.
+- Inspect existing uncommitted work before edits; do not overwrite it.
+- Deployment and traffic experiments have external effects; follow the requested scope.

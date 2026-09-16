@@ -5,3 +5,22 @@ __pycache__/
 .worktrees/
 # Reproducible, potentially large offline feasibility evidence; summaries are in docs.
 tools/replay/results/
+
+# Local machine state and development tooling.
+.DS_Store
+.pytest_cache/
+node_modules/
+.claude/
+.superpowers/
+
+# Private environment, session credentials, and machine-specific configuration.
+.env
+.env.*
+!.env.example
+*.token
+*.pem
+*.key
+*.local.json
+
+# Generated demo exports and experiment archives belong outside source control.
+/outputs/

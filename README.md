@@ -9,59 +9,51 @@ TinyLEO is an open-source community toolkit to enable small-scale Low Earth Orbi
 <img src="docs/toolkit.png" width="800px"/>
 </div>
 
-## Code Structure 
+## Canada experiments and team review
 
-```plaintext
-TinyLEO toolkit/
-├── docs/                  # Documentation files
-├── network_orchestrator/  # Online LEO network orchestrator
-├── network_synthesizer/   # Offline LEO network synthesizer
-├── LICENSE                # Open-source license file (Apache 2.0)
-├── sigcomm25-tinyleo.pdf  # The SIGCOMM'25 paper on TinyLEO
-└── README.md              # This file
+This working version extends the upstream [TinyLEO toolkit](https://github.com/TinyLEO-toolkit/TinyLEO)
+with Canada topology validation, one-second emulation, browser Live/Replay,
+and multi-flow Shortest Path / QoS Priority comparison. The original toolkit,
+paper attribution and Apache 2.0 license are retained.
+
+**组员从这里开始：[项目导览与上手](docs/team-guide.md)。**
+Publishing this checkout: [GitHub sharing guide](docs/github-sharing.md).
+
+| Goal | Start here |
+|---|---|
+| Understand the extensions and what has been validated | [Team guide](docs/team-guide.md) |
+| Browse all documentation | [Documentation index](docs/README.md) |
+| View recorded experiments in a browser | [Replay guide](tools/replay/README.md) |
+| Prepare a Linux VM and run Live / Compare | [Live setup](tools/replay/LIVE.md) |
+| Generate and run 301 physical states over 300 seconds | [One-second workflow](docs/second-resolution-emulation.md) |
+| Study the original offline / online components | [Synthesizer](network_synthesizer/README.md) · [Orchestrator](network_orchestrator/README.md) |
+
+The latest recorded multi-flow acceptance is **one real A/B pair**, documented
+in the [dated validation record](docs/superpowers/plans/2026-09-08-live-qos-progress.md#vm-handover-and-single-pair-acceptance--2026-09-08-local-time).
+It is not a repeated-trial or universal QoS superiority result. Full experiment
+archives and the generated standalone demo are not included in this checkout;
+request them from the experiment owner. Browser fixtures are synthetic tests.
+
+## Code structure
+
+```text
+TinyLEO/
+├── network_synthesizer/   # Offline demand-driven network synthesis
+├── network_orchestrator/ # Northbound routing, MPC, southbound and SRv6
+├── tools/                # One-second experiment preparation and execution
+│   └── replay/           # Live relay, traffic collection, replay and Compare
+├── docs/                 # Team guide, runbooks, historical plans and paper site
+├── LICENSE               # Apache 2.0
+└── sigcomm25-tinyleo.pdf  # Original SIGCOMM 2025 paper
 ```
 
-For real-time Canada experiments, use the [one-second emulation workflow](docs/second-resolution-emulation.md):
-301 physical samples over 300 seconds, deadline telemetry, and independent packet probes.
-
-For the historical finite 12-epoch, 64–96-satellite Canada feasibility workflow and its
-fail-closed acceptance checks, see the
-[Canada parity-scale emulation runbook](docs/canada-parity-runbook.md).
-
-<!--## Overview
-
-Our TinyLEO toolkit consists of two core components:
-
-### [Offline LEO Network Synthesizer](network_synthesizer)
-
-This module implements TinyLEO’s demand-driven LEO network synthesizer.  
-For detailed usage and documentation, see the [README](network_synthesizer/README.md).
-
-<div align=center>
-<img src="docs/synthesizer_overview.png" width="400px" />
-</div>
-
-### [Online LEO Network orchestrator](network_orchestrator/)
-
-This module comprises a series of control-plane and data-plane tools, including
-
-- (1) Geographic northbound API
-- (2) Orbital model predictive controller
-- (3) Southbound API
-- (4) Geo-segment anycast
-  
-For detailed usage and documentation, see the [README](network_orchestrator/README.md)
-
-<div align=center>
-<img src="docs/orchestrator_overview.png" width="400px" />
-</div>
-
-
--->
+The historical 12-epoch Canada workflow remains available in the
+[parity runbook](docs/canada-parity-runbook.md). Use the one-second workflow
+above for the newer temporal-resolution experiments.
 
 ## How to Cite TinyLEO?
 
-Please use the following BitTex file when citing TinyLEO:
+Please use the following BibTeX file when citing TinyLEO:
 
 ```bibtex
 @inproceedings{tinyleo,
@@ -80,7 +72,7 @@ TinyLEO toolkit is released under the [Apache 2.0 license](LICENSE).
 Copyright 2025 TinyLEO
 
 Licensed under the Apache License, Version 2.0 (the "License");
-you may not use this file except in compliance with the License. 
+you may not use this file except in compliance with the License.
 You may obtain a copy of the License at
 
    http://www.apache.org/licenses/LICENSE-2.0
