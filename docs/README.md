@@ -2,6 +2,9 @@
 
 ## Start here
 
+- [Changes from upstream TinyLEO](upstream-changes.md): cumulative implementation changes, attribution boundaries, and commit references.
+- [Scaled emulation profile](emulation-profile.md): node counts, hardware, geography, coverage definitions, traffic, timing, and evidence.
+
 - [Offline data and replay](../data/README.md): bundled real recordings, root replay.html frontend, run index and checksums; no VM access required.
 
 - [Team guide](team-guide.md): project scope, code reading order, local checks and data requirements.

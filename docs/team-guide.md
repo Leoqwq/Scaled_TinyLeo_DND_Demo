@@ -12,13 +12,15 @@ MPC controller, SRv6 data plane, paper attribution, and Apache 2.0 license are r
 | Canada topology validation | `network_orchestrator/topology_artifact_validator.py` |
 | One-second orbit states and clock | `network_synthesizer/second_orbits.py`, `network_orchestrator/second_clock.py` |
 | Experiment preparation, execution, checks | `tools/prepare_second_run.py`, `tools/run_second_emulation.py`, `tools/check_second_run.py` |
-| Upstream routing algorithms | `network_orchestrator/northbound.py` |
+| Upstream-derived baseline and added QoS routing | `network_orchestrator/northbound.py` |
 | Multi-flow scenario and capacity adaptation | `tools/replay/scenario.py`, `tools/replay/competition.py` |
 | Traffic, archives, and kernel evidence | `traffic.py`, `competition_archive.py`, `evidence.py` under `tools/replay/` |
 | VM session and local relay | `tools/replay/live.py`, `tools/replay/live_server.py` |
 | UI template and comparison logic | `seconds.html`, `compare.js`, `compare_ui.js` under `tools/replay/` |
 
-Start with the [offline data guide](../data/README.md), then explore the relevant source.
+Start with the [cumulative change overview](upstream-changes.md),
+[emulation parameters](emulation-profile.md), and [offline data guide](../data/README.md),
+then explore the relevant source.
 The [one-second workflow](second-resolution-emulation.md) documents the experiment model.
 
 ## Watch recordings

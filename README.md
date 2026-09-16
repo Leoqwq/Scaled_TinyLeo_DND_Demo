@@ -9,7 +9,7 @@ one-second topology updates, offline browser replay, and recorded
 Shortest Path / QoS Priority comparisons. The original TinyLEO research and
 networking architecture are credited below.
 
-[Team guide](docs/team-guide.md) · [Offline data guide](data/README.md) · [Documentation](docs/README.md)
+[Changes from TinyLEO](docs/upstream-changes.md) · [Emulation profile](docs/emulation-profile.md) · [Team guide](docs/team-guide.md) · [Offline data](data/README.md)
 
 ## What the demo does
 
@@ -26,9 +26,51 @@ ping probes help examine how prioritizing one flow affects the others.
 - **A/B comparison:** matched recordings show geographic route intent alongside
   receiver throughput, packet loss, and ping RTT, including tradeoffs between flows.
 
-The demo uses TinyLEO's northbound routing algorithms and extends the surrounding
-experiment, measurement, and visualization workflow. Route overlays represent
+The demo compares TinyLEO's upstream-derived Shortest Path baseline with this
+fork's added `qos_priority` policy, and extends the experiment, measurement, and
+visualization workflow. Route overlays represent
 controller intent; they are not observed packet-hop traces.
+
+## Scaled emulation parameters
+
+These parameters describe the recorded multi-flow demo; Live is currently unavailable.
+
+| Parameter | Recorded demo configuration |
+|---|---|
+| Scale | **96 satellite nodes + 6 ground stations = 102 emulated nodes** on one Linux VM |
+| Altitude and orbit | **573 km**; circular Kepler model with Earth rotation, synthetic anchor |
+| Geographic scope | Six Canada scenario cells: **12, 13, 14, 23, 24, 25** in an 11 x 11 grid |
+| Ground stations | Whitehorse, Yellowknife, Iqaluit, Vancouver, Calgary, Toronto |
+| Duration | **300 seconds**, states t=0…300: **301 snapshots at 1-second intervals** |
+| Experiment machine | Documented GCP **n2-standard-8: 8 vCPUs, 32 GiB RAM**; controller and all nodes share the VM |
+| Link rates | **10 Mbit/s ISL**, **100 Mbit/s GSL**; 1000-packet queues; configured random loss 0% |
+| Traffic | C2 **4 Mbit/s**, priority 5; telemetry **2 Mbit/s**, priority 3; bulk **9 Mbit/s**, priority 1 |
+| Comparison window | **80–240 s**, when all three UDP flows compete; payload size 1000 bytes |
+| Measurement | iperf3 **3.20** receiver records, ping RTT, controller timing, and kernel evidence |
+
+**Coverage needs qualification:** the original 96-satellite, 12-epoch synthesis
+satisfied **93.75% of modeled demand**, below its 95% target. This is neither
+Canada land-area coverage nor radio visibility certification. The newer 301-state
+topology has a separate **93.023% two-edge-disjoint-path epoch ratio**, with
+32 topology changes and 36 gateway handovers. Only 12–14 of the 96 satellites
+participate in the matched regional topology at a given state. The inherited
+GSL elevation cutoff is not enforced.
+
+The [full emulation profile](docs/emulation-profile.md) gives station coordinates,
+traffic phases, coverage definitions, host evidence, and recorded resource usage.
+Exact VM image/kernel/Python versions and disk configuration are not established
+by the published run metadata. Ubuntu 22.04+ is a documented deployment requirement,
+not a verified image identifier.
+
+## What changed from TinyLEO?
+
+The [consolidated change overview](docs/upstream-changes.md) covers the cumulative
+fork changes against upstream commit `bd5dc97`: priority-aware routing and routing
+analysis tools; bounded regional synthesis; topology validation; single-VM/SRv6
+runtime fixes; one-second propagation and timing; real multi-flow measurements;
+versioned archives; and the unified Replay/Compare frontend with bundled data.
+It identifies source files and representative commits, and separates inherited
+TinyLEO methods from this project's extensions.
 
 ## Open the offline demo
 

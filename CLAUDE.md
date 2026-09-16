@@ -1,6 +1,8 @@
 # Repository guidance
 
 - Read `README.md` and `docs/team-guide.md` for scope and navigation.
+- `docs/upstream-changes.md` tracks fork changes; `docs/emulation-profile.md` defines recorded parameters.
+- QoS priority routing is a fork addition; distinguish synthesis coverage from radio coverage.
 - Preserve upstream attribution, `LICENSE`, and paper citations.
 - Keep the existing source layout: scripts and example configs use relative paths.
 - Local Replay tests: `python -m unittest discover -s tools/replay -p 'test_*.py' -v`.
