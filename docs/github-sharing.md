@@ -10,12 +10,11 @@
 ## 本项目的分享位置
 
 - 小组仓库：[Scaled_TinyLeo_DND_Demo](https://github.com/Leoqwq/Scaled_TinyLeo_DND_Demo)
-- 扩展分支：[`codex/canada-topology-validator`](https://github.com/Leoqwq/Scaled_TinyLeo_DND_Demo/tree/codex/canada-topology-validator)
 - 原版仓库：[TinyLEO-toolkit/TinyLEO](https://github.com/TinyLEO-toolkit/TinyLEO)
 
 本地 `origin` 用于你的小组仓库，`upstream` 保留原版仓库。
 小组仓库的 `main` 包含已合并的 Canada / Live / Replay 扩展，组员可以直接浏览仓库首页。
-上面的开发分支保留用于追溯开发历史。
+已合并的开发分支已删除，开发历史保留在 `main` 的提交记录中。
 
 ## 组员下载
 
