@@ -1,5 +1,6 @@
 """Loopback-only VM API / local relay. Connect endpoints using an SSH tunnel."""
 import argparse
+from datetime import datetime
 import hashlib
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 import json
@@ -15,6 +16,24 @@ from urllib.request import Request, build_opener, ProxyHandler
 import zipfile
 
 from live import Session, validate_algorithm
+
+
+def run_download_directory(output, run_id, algorithm, replay, tz=None):
+    """Reuse a run's folder; label new folders with the first recorded local time."""
+    if not re.fullmatch('[a-f0-9]{32}', run_id):
+        raise ValueError('Invalid remote run id')
+    validate_algorithm(algorithm)
+    existing = sorted(output.glob(f'*/{run_id}.*'))
+    if existing:
+        return existing[0].parent
+    frames = replay.get('modes', {}).get(algorithm, [])
+    recorded = frames[0].get('telemetry', {}).get('recorded_unix_s') if frames else None
+    # Failures before the first frame have no recorded time: use receipt time.
+    stamp = datetime.fromtimestamp(recorded if recorded is not None else time.time(), tz).strftime('%Y-%m-%d_%H-%M-%S')
+    target = output / f'{stamp}_{algorithm}'
+    if target.exists():
+        target = output / f'{stamp}_{algorithm}_{run_id}'
+    return target
 
 
 class Relay:
@@ -78,8 +97,7 @@ class Relay:
         run_id = state['run_id']
         if not re.fullmatch('[a-f0-9]{32}', run_id):
             raise ValueError('Invalid remote run id')
-        target = self.output / f'{run_id}.zip'
-        partial = target.with_suffix('.zip.partial')
+        partial = self.output / f'.{run_id}.zip.partial'
         with self.lock:
             self.state['download'] = 'downloading'
         try:
@@ -92,7 +110,10 @@ class Relay:
                 raise ValueError('Archive SHA-256 mismatch; partial file retained, retrying')
             with zipfile.ZipFile(partial) as z:
                 replay = z.read('replay.json')
-                json.loads(replay)
+                data = json.loads(replay)
+            folder = run_download_directory(self.output, run_id, state['algorithm'], data)
+            folder.mkdir(parents=True, exist_ok=True)
+            target = folder / f'{run_id}.zip'
             os.replace(partial, target)
             replay_target = target.with_suffix('.replay.json')
             temporary = replay_target.with_suffix('.partial')

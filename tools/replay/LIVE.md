@@ -121,7 +121,13 @@ data and is archived when possible.
 ## Automatic files
 
 The local relay saves `<run-id>.zip`, `<run-id>.sha256`, and
-`<run-id>.replay.json` in the chosen outputs directory. ZIP includes frame
+`<run-id>.replay.json` together under
+`<outputs>/YYYY-MM-DD_HH-MM-SS_<algorithm>/`. The timestamp is the first
+recorded frame's real wall-clock time in the Mac/local relay timezone (not
+the simulated orbit date); pre-frame failures use download receipt time.
+Retries reuse the run folder; same-second collisions append the run ID.
+Point `--output` directly at the desired outputs root, not a comparison batch
+folder. ZIP includes frame
 snapshots, actual link commands, telemetry, raw continuous ping, run log,
 algorithm input/settings/decisions, summary, time axis and input topology and
 validation artifacts. SSH credentials are not included. SHA-256 is checked

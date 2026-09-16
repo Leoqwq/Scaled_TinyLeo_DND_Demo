@@ -19,6 +19,12 @@ const {run}=require('./test_compare.cjs');
   assert.match(await page.locator('#compareStatus').innerText(),/Matched/);
   assert.match(await page.locator('#compareSummary').innerText(),/10.00/);
   assert.equal(await page.locator('#comparePhase').inputValue(),'competition');
+  const ordered = await page.evaluate(() => {
+    const ids = ['compareMap','compareRtt','compareSummary','compareDemands'];
+    return ids.every((id,i) => !i || !!(document.getElementById(ids[i-1])
+      .compareDocumentPosition(document.getElementById(id)) & Node.DOCUMENT_POSITION_FOLLOWING));
+  });
+  assert.equal(ordered,true,'Map and charts must precede final summary and route statistics');
   await page.locator('#compareFirstDifference').click();
   assert.equal(await page.locator('#compareTime').inputValue(),'83');
   assert.match(await page.locator('#compareRoutes').innerText(),/12 → 23 → 24 → 25 → 14/);

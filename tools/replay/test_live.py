@@ -77,7 +77,8 @@ class LiveContractTests(unittest.TestCase):
         from live_server import Relay
         blob = io.BytesIO()
         with zipfile.ZipFile(blob, 'w') as z:
-            z.writestr('replay.json', '{"schema_version":1}')
+            z.writestr('replay.json', json.dumps({'schema_version':1, 'modes': {
+                'qos_priority': [{'telemetry': {'recorded_unix_s': 1788923013.377}}]}}))
         content = blob.getvalue()
         with tempfile.TemporaryDirectory() as directory:
             relay = Relay.__new__(Relay)
@@ -85,14 +86,40 @@ class LiveContractTests(unittest.TestCase):
             relay.lock = threading.Lock()
             relay.state = {}
             relay.request = lambda path: io.BytesIO(content)
-            run = {'run_id':'a'*32, 'sha256':'0'*64}
+            run = {'run_id':'a'*32, 'algorithm':'qos_priority', 'sha256':'0'*64}
             relay.download(run)
             self.assertEqual(relay.state['download'], 'failed')
             self.assertFalse((relay.output / ('a'*32+'.zip')).exists())
             run['sha256'] = hashlib.sha256(content).hexdigest()
             relay.download(run)
             self.assertEqual(relay.state['download'], 'saved')
-            self.assertEqual(json.loads((relay.output / ('a'*32+'.replay.json')).read_text()), {'schema_version':1})
+            target = Path(relay.state['local_archive'])
+            self.assertNotEqual(target.parent, relay.output)
+            self.assertTrue(target.parent.name.endswith('_qos_priority'))
+            self.assertEqual(json.loads(target.with_suffix('.replay.json').read_text())['schema_version'], 1)
+            self.assertEqual(len(list(target.parent.iterdir())), 3)
+            relay.download(run)
+            self.assertEqual(Path(relay.state['local_archive']), target)
+            self.assertEqual(len(list(relay.output.iterdir())), 1)
+
+    def test_run_folders_use_recording_time_and_separate_collisions(self):
+        from live_server import run_download_directory
+        from zoneinfo import ZoneInfo
+        replay = {'modes': {'shortest_path': [
+            {'telemetry': {'recorded_unix_s': 1788923013.377}}]}}
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            first = run_download_directory(root, 'a'*32, 'shortest_path', replay,
+                                           tz=ZoneInfo('America/Vancouver'))
+            self.assertEqual(first.name, '2026-09-08_20-03-33_shortest_path')
+            first.mkdir()
+            (first / ('a'*32 + '.zip')).touch()
+            second = run_download_directory(root, 'b'*32, 'shortest_path', replay,
+                                            tz=ZoneInfo('America/Vancouver'))
+            self.assertNotEqual(first, second)
+            self.assertEqual(run_download_directory(root, 'a'*32, 'shortest_path', replay), first)
+            with self.assertRaises(ValueError):
+                run_download_directory(root, 'a'*32, '../../escape', replay)
 
     def test_unprepared_session_cannot_start(self):
         from live import Session
